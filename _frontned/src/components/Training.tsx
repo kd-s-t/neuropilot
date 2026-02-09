@@ -29,9 +29,6 @@ import {
 const CANVAS_WIDTH = 500;
 const CANVAS_HEIGHT = 500;
 const BOX_SIZE = 20;
-const EEG_MSG_DT = 0.1;
-const HOLD_FOR_COUNT_SEC = 3;
-
 type Derived = { dAb: string | null; tAa: string | null; gD: string | null };
 const BRAINWAVE_COMBINATIONS: { id: string; label: string; check: (d: number, t: number, a: number, b: number, g: number, derived: Derived) => boolean }[] = [
   { id: "start", label: "Delta > Beta → start", check: (d, _t, _a, b) => d > b },
@@ -69,16 +66,29 @@ const BRAINWAVE_COMBINATIONS: { id: string; label: string; check: (d: number, t:
 const CONTROL_IDS = ["start", "forward", "up", "down", "turnLeft", "turnRight", "back", "left", "right"] as const;
 const SUGGESTION_STORAGE_KEY = "neuropilot_suggestion";
 
+function controlShortName(label: string): string {
+  const afterArrow = label.split(" → ").pop();
+  return afterArrow?.trim() ?? label;
+}
+
 function getSuggestions(counts: Record<string, number>): { top: { id: string; label: string; count: number }[]; rare: { id: string; label: string; count: number }[]; sentence: string } {
   const withCount = BRAINWAVE_COMBINATIONS.map((c) => ({ ...c, count: counts[c.id] ?? 0 }));
-  const top = withCount.filter((x) => x.count > 0).sort((a, b) => b.count - a.count).slice(0, 5);
   const controlEntries = withCount.filter((x) => CONTROL_IDS.includes(x.id as (typeof CONTROL_IDS)[number]));
-  const rare = controlEntries.filter((x) => x.count === 0);
-  const topLabels = top.length ? top.map((x) => `${x.label} (${x.count})`).join(", ") : "none yet";
-  const rareLabels = rare.length ? rare.map((x) => x.label).join(", ") : "none";
-  const sentence = top.length
-    ? `You hit these often: ${topLabels}. ${rare.length ? `Practice these more: ${rareLabels}.` : "Keep practicing all controls."}`
-    : "Hold patterns for 3s to build counts, then suggestions will appear.";
+  const goodFor = controlEntries.filter((x) => x.count > 0).sort((a, b) => b.count - a.count);
+  const practiceMore = controlEntries.filter((x) => x.count === 0);
+  const top = withCount.filter((x) => x.count > 0).sort((a, b) => b.count - a.count).slice(0, 5);
+  const rare = practiceMore;
+
+  let sentence: string;
+  if (goodFor.length === 0) {
+    sentence = "";
+  } else {
+    const goodNames = goodFor.map((x) => controlShortName(x.label)).join(", ");
+    const practiceNames = practiceMore.length > 0 ? practiceMore.map((x) => controlShortName(x.label)).join(", ") : "";
+    sentence = practiceNames
+      ? `Good for: ${goodNames}. Practice more: ${practiceNames}.`
+      : `Good for: ${goodNames}.`;
+  }
   return { top, rare, sentence };
 }
 
@@ -146,10 +156,10 @@ export default function Lab() {
   const [combinationCounts, setCombinationCounts] = useState<Record<string, number>>(() =>
     Object.fromEntries(BRAINWAVE_COMBINATIONS.map((c) => [c.id, 0]))
   );
-  const holdTimeRef = useRef<Record<string, number>>({});
-  const [aiProvider, setAiProvider] = useState<"openai" | "gemini">("openai");
-  const [openaiSuggestion, setOpenaiSuggestion] = useState<{ use_fallback: boolean; sentence?: string; top?: string[]; rare?: string[]; provider?: "openai" | "gemini" } | null>(null);
+  const [aiProvider, setAiProvider] = useState<"openai" | "gemini_flash" | "gemini_pro">("gemini_flash");
+  const [openaiSuggestion, setOpenaiSuggestion] = useState<{ use_fallback: boolean; sentence?: string; top?: string[]; rare?: string[]; provider?: "openai" | "gemini_flash" | "gemini_pro"; error?: string } | null>(null);
   const [savedSuggestion, setSavedSuggestion] = useState<string | null>(null);
+  const [pinnedSuggestion, setPinnedSuggestion] = useState<string | null>(null);
   useEffect(() => {
     setSavedSuggestion(localStorage.getItem(SUGGESTION_STORAGE_KEY));
   }, []);
@@ -158,6 +168,9 @@ export default function Lab() {
   const OPENAI_THROTTLE_MS = 60000;
 
   const suggestion = useMemo(() => getSuggestions(combinationCounts), [combinationCounts]);
+  useEffect(() => {
+    setPinnedSuggestion(null);
+  }, [combinationCounts]);
 
   useEffect(() => {
     if (arenaMode !== "3d") return;
@@ -173,24 +186,29 @@ export default function Lab() {
       api.suggestions
         .getSuggestions(combinationCounts, aiProvider)
         .then(setOpenaiSuggestion)
-        .catch(() => setOpenaiSuggestion({ use_fallback: true }));
+        .catch(() => setOpenaiSuggestion({ use_fallback: true, error: "Request failed." }));
     }, OPENAI_DEBOUNCE_MS);
     return () => clearTimeout(t);
   }, [arenaMode, combinationCounts, aiProvider]);
 
   const displaySuggestion = openaiSuggestion && !openaiSuggestion.use_fallback ? openaiSuggestion : suggestion;
-  const suggestionText = savedSuggestion ?? displaySuggestion.sentence;
+  const suggestionText = savedSuggestion ?? pinnedSuggestion ?? displaySuggestion.sentence ?? "";
+
+  const handleMakeSuggestions = useCallback(() => {
+    const text = suggestion.sentence?.trim() ?? "";
+    if (text) setPinnedSuggestion(text);
+  }, [suggestion.sentence]);
 
   const handleUseSuggestion = useCallback(() => {
-    const text = displaySuggestion.sentence ?? "";
-    if (!text) return;
-    localStorage.setItem(SUGGESTION_STORAGE_KEY, text);
-    setSavedSuggestion(text);
-  }, [displaySuggestion.sentence]);
+    if (!suggestionText.trim()) return;
+    localStorage.setItem(SUGGESTION_STORAGE_KEY, suggestionText);
+    setSavedSuggestion(suggestionText);
+  }, [suggestionText]);
 
   const handleClearSuggestion = useCallback(() => {
     localStorage.removeItem(SUGGESTION_STORAGE_KEY);
     setSavedSuggestion(null);
+    setPinnedSuggestion(null);
   }, []);
 
   positionRef.current = position;
@@ -240,22 +258,6 @@ export default function Lab() {
       eegCommandRef.current = next;
       lastEegCommandRef.current = { ...next };
 
-      const derived: Derived = { dAb, tAa, gD };
-      const toIncrement: string[] = [];
-      BRAINWAVE_COMBINATIONS.forEach((c) => {
-        const met = c.check(d, t, a, b, g, derived);
-        const hold = (holdTimeRef.current[c.id] ?? 0) + (met ? EEG_MSG_DT : 0);
-        holdTimeRef.current[c.id] = met ? hold : 0;
-        if (hold >= HOLD_FOR_COUNT_SEC) {
-          holdTimeRef.current[c.id] = hold - HOLD_FOR_COUNT_SEC;
-          toIncrement.push(c.id);
-        }
-      });
-      if (toIncrement.length > 0) {
-        setCombinationCounts((cc) =>
-          toIncrement.reduce((acc, id) => ({ ...acc, [id]: (cc[id] ?? 0) + 1 }), { ...cc })
-        );
-      }
     },
     [arenaMode]
   );
@@ -565,7 +567,6 @@ export default function Lab() {
               ) : (
                 <>
                   <ul className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm text-muted-foreground sm:grid-cols-2">
-                    <li className="col-span-2 text-muted-foreground/80">Hold 3s to count. F or Space = instant start.</li>
                     {BRAINWAVE_COMBINATIONS.map((c) => (
                       <li key={c.id}>
                         {c.label} ({combinationCounts[c.id] ?? 0})
@@ -575,9 +576,11 @@ export default function Lab() {
                   <div className="mt-4 rounded-lg border border-border bg-muted/30 p-3 text-sm">
                     <div className="font-medium text-foreground mb-1 flex items-center justify-between gap-2 flex-wrap">
                       <span>
-                        Suggestions (complete controls)
+                        Suggestions
                         {openaiSuggestion && !openaiSuggestion.use_fallback && openaiSuggestion.provider && (
-                          <span className="ml-2 text-xs font-normal text-muted-foreground">({openaiSuggestion.provider === "gemini" ? "Gemini" : "OpenAI"})</span>
+                          <span className="ml-2 text-xs font-normal text-muted-foreground">
+                            ({openaiSuggestion.provider === "openai" ? "gpt-4o-mini" : openaiSuggestion.provider === "gemini_flash" ? "Gemini 3 Flash" : "Gemini 3 Pro"})
+                          </span>
                         )}
                       </span>
                       <span className="flex items-center gap-2">
@@ -585,18 +588,23 @@ export default function Lab() {
                         <select
                           id="ai-provider"
                           value={aiProvider}
-                          onChange={(e) => setAiProvider(e.target.value as "openai" | "gemini")}
+                          onChange={(e) => setAiProvider(e.target.value as "openai" | "gemini_flash" | "gemini_pro")}
                           className="rounded-md border border-input bg-background px-2.5 py-1.5 text-sm font-medium text-foreground"
                         >
-                          <option value="openai">OpenAI</option>
-                          <option value="gemini">Gemini</option>
+                          <option value="gemini_flash">Gemini 3 Flash</option>
+                          <option value="gemini_pro">Gemini 3 Pro</option>
+                          <option value="openai">gpt-4o-mini</option>
                         </select>
                       </span>
                     </div>
                     <p className="text-muted-foreground text-xs mb-2">
-                        <span className="font-medium text-foreground">Complete controls:</span>{" "}
                         {BRAINWAVE_COMBINATIONS.filter((c) => CONTROL_IDS.includes(c.id as (typeof CONTROL_IDS)[number])).map((c) => c.label).join(" · ")}
                       </p>
+                      {openaiSuggestion?.use_fallback && openaiSuggestion?.error && (
+                        <p className="mb-2 text-sm text-destructive">
+                          {openaiSuggestion.error}
+                        </p>
+                      )}
                       <p className="text-muted-foreground">
                         {suggestionText}
                       </p>
@@ -614,15 +622,24 @@ export default function Lab() {
                           )}
                         </>
                       )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-3"
-                      onClick={handleUseSuggestion}
-                      disabled={!displaySuggestion.sentence?.trim()}
-                    >
-                      Use
-                    </Button>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleMakeSuggestions}
+                        disabled={!suggestion.sentence?.trim()}
+                      >
+                        Make suggestions
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleUseSuggestion}
+                        disabled={!suggestionText.trim()}
+                      >
+                        Use
+                      </Button>
+                    </div>
                   </div>
                 </>
               )}

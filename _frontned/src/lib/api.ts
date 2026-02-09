@@ -335,8 +335,8 @@ export const api = {
   suggestions: {
     async getSuggestions(
       combinationCounts: Record<string, number>,
-      provider: "openai" | "gemini" = "openai"
-    ): Promise<{ use_fallback: boolean; sentence?: string; top?: string[]; rare?: string[]; provider?: "openai" | "gemini" }> {
+      provider: "openai" | "gemini_flash" | "gemini_pro" = "gemini_flash"
+    ): Promise<{ use_fallback: boolean; sentence?: string; top?: string[]; rare?: string[]; provider?: "openai" | "gemini_flash" | "gemini_pro"; error?: string }> {
       const res = await fetch(`${API_BASE}/suggestions/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
