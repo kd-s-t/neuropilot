@@ -62,6 +62,16 @@ https://lablab.ai/ai-hackathons/launch-fund-ai-meets-robotics
 
 **Main IP:** 45.32.121.168 — App: http://45.32.121.168:3000 | API: http://45.32.121.168:8000
 
+### CI (GitHub Actions)
+
+On push to `main`, `.github/workflows/docker-push-vultr.yml` runs three jobs:
+
+1. **Build** – Docker build for backend and frontend (cache in GHA).
+2. **Push** – Push images to Vultr Container Registry (`backend:latest` / `frontend:latest`).
+3. **Pull** – SSH to compute VM, log in to VCR, pull latest images, then `docker compose up -d` in the project directory.
+
+Required repo secrets: `VULTR_CR_HOST`, `VULTR_CR_NAME`, `VULTR_CR_USER`, `VULTR_CR_PASSWORD`, `VM_HOST` (VM IP), `VM_SSH_PRIVATE_KEY`. The Pull step runs in `/root/neuropilot` by default; adjust the `script` in the workflow if your app lives elsewhere.
+
 ## Quick Start
 
 ### Prerequisites
