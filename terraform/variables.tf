@@ -39,3 +39,27 @@ variable "db_name" {
   description = "PostgreSQL database and user name. Set via TF_VAR_db_name."
   default     = "neuropilot"
 }
+
+variable "db_plan" {
+  type        = string
+  description = "Vultr managed database plan ID. List plans: API /v2/databases/plans?region=<region>"
+  default     = "vultr-dbaas-startup-cc-1-55-2"
+}
+
+variable "registry_name" {
+  type        = string
+  description = "Vultr Container Registry name (lowercase alphanumeric only)"
+  default     = "neuropilot"
+}
+
+variable "registry_plan" {
+  type        = string
+  description = "Vultr Container Registry plan: start_up (10GB free), business, premium, enterprise"
+  default     = "start_up"
+}
+
+variable "registry_public" {
+  type        = bool
+  description = "Whether the registry is publicly readable"
+  default     = false
+}

@@ -97,7 +97,7 @@ export default function Login() {
       console.error("Login error:", err);
       setError(
         errorMessage.includes("fetch") || errorMessage.includes("network") || errorMessage.includes("timed out")
-          ? "Cannot reach backend. Start it with: cd _Backend && uvicorn app:app --reload --port 8000"
+          ? "Cannot reach backend. Start it with: cd _backend && uvicorn app:app --reload --port 8000"
           : errorMessage
       );
       setLoading(false);
@@ -148,7 +148,7 @@ export default function Login() {
             {backendReachable === false && (
             <Alert status="warning" className="mb-4">
               <Alert.Description>
-                Backend not reachable. Start it: <code className="text-xs">cd _Backend && uvicorn app:app --reload --port 8000</code>
+                Backend not reachable. Start it: <code className="text-xs">cd _backend && uvicorn app:app --reload --port 8000</code>
               </Alert.Description>
             </Alert>
             )}

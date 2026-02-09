@@ -1,0 +1,46 @@
+name: Build and push to Vultr Container Registry
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY_HOST: ${{ secrets.VULTR_CR_HOST }}
+  REGISTRY_NAME: ${{ secrets.VULTR_CR_NAME }}
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Vultr Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.VULTR_CR_HOST }}
+          username: ${{ secrets.VULTR_CR_USER }}
+          password: ${{ secrets.VULTR_CR_PASSWORD }}
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./_backend
+          file: ./_backend/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.VULTR_CR_HOST }}/${{ secrets.VULTR_CR_NAME }}/backend:${{ github.sha }}
+            ${{ secrets.VULTR_CR_HOST }}/${{ secrets.VULTR_CR_NAME }}/backend:latest
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./_frontned
+          file: ./_frontned/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.VULTR_CR_HOST }}/${{ secrets.VULTR_CR_NAME }}/frontend:${{ github.sha }}
+            ${{ secrets.VULTR_CR_HOST }}/${{ secrets.VULTR_CR_NAME }}/frontend:latest

@@ -1,27 +1,10 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: ${DB_NAME:-neuropilot}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME:-neuropilot}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_NAME:-neuropilot}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
   backend:
     build:
       context: ./_backend
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: postgresql://${DB_NAME:-neuropilot}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-neuropilot}
-    depends_on:
-      postgres:
-        condition: service_healthy
+      DATABASE_URL: ${DATABASE_URL}
     ports:
       - "8000:8000"
 
@@ -33,6 +16,3 @@ services:
       - backend
     ports:
       - "3000:3000"
-
-volumes:
-  pgdata:

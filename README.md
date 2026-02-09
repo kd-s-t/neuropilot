@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./_Frontned/public/readmelogo.png" alt="NeuroPilot" width="40%" />
+  <img src="./_frontned/public/readmelogo.png" alt="NeuroPilot" width="40%" />
 </div>
 
 # Neuro<span style="color: #3B82F6;">Pilot</span> - EEG Brainwave Control System
@@ -43,6 +43,10 @@ https://lablab.ai/ai-hackathons/launch-fund-ai-meets-robotics
 	<img src="https://img.shields.io/badge/Mac M1/M2-000000?style=for-the-badge&logo=apple&logoColor=white" /> 
 	<img src="https://img.shields.io/badge/Muse 2-000000?style=for-the-badge&logo=bluetooth&logoColor=white" /> 
 	<img src="https://img.shields.io/badge/DJI Tello-000000?style=for-the-badge&logo=dji&logoColor=white" /> 
+	<img src="https://img.shields.io/badge/Vultr-007BFC?style=for-the-badge&logo=vultr&logoColor=white" /> 
+	<img src="https://img.shields.io/badge/Terraform-7B42BC?style=for-the-badge&logo=terraform&logoColor=white" /> 
+	<img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" /> 
+	<img src="https://img.shields.io/badge/Docker%20Hub-2496ED?style=for-the-badge&logo=docker&logoColor=white" /> 
 </div>
 
 ## Architecture
@@ -50,6 +54,39 @@ https://lablab.ai/ai-hackathons/launch-fund-ai-meets-robotics
 - **Backend**: FastAPI (Python) - Custom BCI middleware handling authentication, EEG data processing, machine control, and WebSocket connections
 - **Frontend**: Next.js 15 with NextAuth - Modern React application with JWT authentication, real-time visualization, and machine control interface
 - **Database**: PostgreSQL - Stores user sessions, training data, EEG recordings, machines, and control bindings
+
+## Deploy (Vultr): 1 VM + 1 managed DB
+
+**Main IP:** 45.32.121.168 — App: http://45.32.121.168:3000 | API: http://45.32.121.168:8000
+
+Terraform creates **one compute instance** (app + Docker) and **one Vultr Managed PostgreSQL** database. The VM is allowed to connect to the DB via `trusted_ips`.
+
+From your machine:
+
+```bash
+cd terraform
+source .env
+terraform apply -auto-approve
+terraform output -raw public_ip
+terraform output -raw database_url
+```
+
+On the VM (replace `VM_IP` and paste the `database_url` into `.env`):
+
+```bash
+ssh root@VM_IP
+git clone https://github.com/YOUR_ORG/neuropilot.git
+cd neuropilot
+cp .env.example .env
+# Set DATABASE_URL in .env to the value from terraform output -raw database_url
+docker compose up -d --build
+```
+
+App: **http://VM_IP:3000**. API: **http://VM_IP:8000**. DB is managed by Vultr (separate from the VM).
+
+**Container registry:** Terraform creates a Vultr Container Registry (VCR). After apply, get the host with `terraform output container_registry_host` and the name with `terraform output container_registry_name`. Generate Docker credentials in Vultr (Account → Container Registry → your registry → Generate Docker credentials), then `docker login <host>` and push images to `<host>/<name>/<image>:<tag>`.
+
+**CI: build on GitHub Actions, pull on VM.** The workflow `.github/workflows/docker-push-vultr.yml` builds backend and frontend and pushes them to VCR on push to `main`. Add these GitHub Actions secrets: `VULTR_CR_HOST` (e.g. `sgp.vultrcr.com`), `VULTR_CR_NAME` (e.g. `neuropilot`), `VULTR_CR_USER`, `VULTR_CR_PASSWORD` (from Vultr → Container Registry → Generate Docker credentials). On the VM, run `docker login <host>` with the same credentials, then `docker pull <host>/<name>/backend:latest` and `docker pull <host>/<name>/frontend:latest` and run the containers (or use a small deploy script that pulls and restarts).
 
 ## Quick Start
 
@@ -77,7 +114,7 @@ Keep the streamer running for the next steps.
 
 **Backend (Windows):**
 ```powershell
-cd _Backend
+cd _backend
 python3 -m pip install -r requirements.txt
 python3 -m alembic upgrade head
 python3 -m uvicorn app:app --reload
@@ -85,7 +122,7 @@ python3 -m uvicorn app:app --reload
 
 **Backend (Mac/Linux):**
 ```bash
-cd _Backend
+cd _backend
 python3 -m pip install -r requirements.txt
 python3 -m alembic upgrade head
 ./start_server.sh
@@ -96,7 +133,7 @@ Backend runs at: `http://localhost:8000`. On Mac, if you start muselsl after the
 
 **Frontend:**
 ```powershell
-cd _Frontned
+cd _frontned
 npm install
 ```
 
@@ -123,7 +160,7 @@ Frontend runs at: `http://localhost:3000`. Confirm live EEG in **EEG Device Cali
 1. Connect laptop to Tello Wi‑Fi (SSID e.g. `TELLO-...`), power on Tello.
 2. Start the DJI webhook server:
 ```bash
-cd DJI_Backend
+cd dji_backend
 python3 -m pip install -r requirements.txt
 python3 webhook_server.py
 # Or: chmod +x start_webhook.sh && ./start_webhook.sh

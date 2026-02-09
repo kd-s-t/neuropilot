@@ -14,7 +14,28 @@ output "ssh_user" {
 }
 
 output "database_url" {
-  value       = "postgresql://${var.db_name}:${var.db_password}@localhost:5432/${var.db_name}"
-  description = "PostgreSQL connection string for the backend (same VM)"
+  value       = "postgresql://${vultr_database.pg.user}:${vultr_database.pg.password}@${vultr_database.pg.host}:${vultr_database.pg.port}/${vultr_database.pg.dbname}"
+  description = "PostgreSQL connection string for the backend (managed DB)"
   sensitive   = true
+}
+
+output "database_host" {
+  value       = vultr_database.pg.host
+  description = "Managed database host"
+  sensitive   = true
+}
+
+output "container_registry_id" {
+  value       = vultr_container_registry.vcr.id
+  description = "Vultr Container Registry ID"
+}
+
+output "container_registry_name" {
+  value       = vultr_container_registry.vcr.name
+  description = "Registry name for docker push/pull"
+}
+
+output "container_registry_host" {
+  value       = "${var.region}.vultrcr.com"
+  description = "Registry host for docker login and push/pull"
 }

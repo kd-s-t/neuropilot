@@ -5,8 +5,5 @@ resource "vultr_instance" "app" {
   label    = var.instance_label
   hostname = var.instance_label
 
-  user_data = templatefile("${path.module}/templates/cloud-init-postgres.tpl", {
-    db_name             = var.db_name
-    db_password_escaped = replace(replace(var.db_password, "\\", "\\\\"), "'", "''")
-  })
+  user_data = file("${path.module}/templates/cloud-init-docker.tpl")
 }

@@ -90,8 +90,8 @@ export default function Home() {
           </Card.Header>
           <Card.Content className="space-y-4 text-foreground">
             <ol className="list-inside list-decimal space-y-2 text-sm">
-              <li>Start the NeuroPilot backend (e.g. <code className="rounded bg-muted px-1 py-0.5">_Backend</code>, port 8000).</li>
-              <li>Start the frontend (e.g. <code className="rounded bg-muted px-1 py-0.5">_Frontned</code>, <code className="rounded bg-muted px-1 py-0.5">npm run dev</code>, port 3000).</li>
+              <li>Start the NeuroPilot backend (e.g. <code className="rounded bg-muted px-1 py-0.5">_backend</code>, port 8000).</li>
+              <li>Start the frontend (e.g. <code className="rounded bg-muted px-1 py-0.5">_frontned</code>, <code className="rounded bg-muted px-1 py-0.5">npm run dev</code>, port 3000).</li>
               <li>With the Muse streamer running (Step 1), put on your Muse 2 and connect it in BlueMuse or muselsl.</li>
               <li>Open <strong>EEG Device Calibration</strong> in the app to confirm live brainwave data from the backend.</li>
             </ol>
@@ -144,7 +144,7 @@ export default function Home() {
             </div>
             <ol className="list-inside list-decimal space-y-2 text-sm">
               <li>Power on the Tello and connect your laptop to Tello Wi‑Fi (SSID e.g. "TELLO‑...").</li>
-              <li>Start the DJI backend (e.g. <code className="rounded bg-muted px-1 py-0.5">python3 webhook_server.py</code> in <code className="rounded bg-muted px-1 py-0.5">DJI_Backend</code>). It listens at <code className="rounded bg-muted px-1 py-0.5">http://localhost:8888/command</code> and forwards commands to the Tello via UDP.</li>
+              <li>Start the DJI backend (e.g. <code className="rounded bg-muted px-1 py-0.5">python3 webhook_server.py</code> in <code className="rounded bg-muted px-1 py-0.5">dji_backend</code>). It listens at <code className="rounded bg-muted px-1 py-0.5">http://localhost:8888/command</code> and forwards commands to the Tello via UDP.</li>
               <li>In <strong>Machines</strong>, open your machine and edit each control (takeoff, land, forward, etc.). Set the webhook URL to <code className="rounded bg-muted px-1 py-0.5">http://localhost:8888/command</code> and save.</li>
               <li>Optional: on the machine page, click a control’s webhook button to test — the NeuroPilot backend POSTs to the DJI backend and the Tello should takeoff, land, or move.</li>
             </ol>

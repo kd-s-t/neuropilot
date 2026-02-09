@@ -6,7 +6,7 @@ Modern React application for NeuroPilot - a brain-computer interface system that
 
 1. **Use correct Node version** (if using nvm):
 ```powershell
-cd _Frontned
+cd _frontned
 nvm use
 ```
 

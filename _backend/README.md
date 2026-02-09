@@ -3,21 +3,21 @@
 ## Setup (First Time)
 
 ### Windows
-1. **Install PostgreSQL** (https://www.postgresql.org/download/windows/). During setup, set password for user `postgres` to `root` (or set `DATABASE_URL` in a `.env` file in `_Backend`).
+1. **Install PostgreSQL** (https://www.postgresql.org/download/windows/). During setup, set password for user `postgres` to `root` (or set `DATABASE_URL` in a `.env` file in `_backend`).
 2. **Create the database** (psql or pgAdmin):
    ```sql
    CREATE DATABASE neuropilot;
    ```
 3. **Then run:**
 ```powershell
-cd _Backend
+cd _backend
 python3 -m pip install -r requirements.txt
 python3 -m alembic upgrade head
 ```
 
 ### Mac (M1/M2) - Fully Supported
 ```bash
-cd _Backend
+cd _backend
 python3 -m pip install -r requirements.txt
 python3 -m alembic upgrade head
 
@@ -29,7 +29,7 @@ conda install -c conda-forge liblsl -y
 
 ### Linux
 ```bash
-cd _Backend
+cd _backend
 python3 -m pip install -r requirements.txt
 python3 -m alembic upgrade head
 ```
@@ -37,7 +37,7 @@ python3 -m alembic upgrade head
 
 ### Raspberry Pi 4 B
 ```bash
-cd _Backend
+cd _backend
 source venv/bin/activate
 python3 -m pip install -r requirements.txt
 python3 -m alembic upgrade head
