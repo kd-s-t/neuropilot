@@ -4,14 +4,16 @@ services:
       context: ./_backend
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:root@host.docker.internal:5432/neuropilot}
     ports:
       - "8000:8000"
 
   frontend:
     build:
-      context: ./_frontend
+      context: ./_frontned
       dockerfile: Dockerfile
+    environment:
+      BACKEND_URL: http://backend:8000
     depends_on:
       - backend
     ports:

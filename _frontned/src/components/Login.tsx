@@ -147,8 +147,8 @@ export default function Login() {
           <Card.Content className="space-y-4">
             {backendReachable === false && (
             <Alert status="warning" className="mb-4">
-              <Alert.Description>
-                Backend not reachable. Start it: <code className="text-xs">cd _backend && uvicorn app:app --reload --port 8000</code>
+              <Alert.Description className="text-black">
+                We can't reach the server right now. Please check your connection and try again in a moment.
               </Alert.Description>
             </Alert>
             )}

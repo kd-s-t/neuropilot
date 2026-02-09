@@ -5,5 +5,5 @@ resource "vultr_database" "pg" {
   plan                   = var.db_plan
   label                  = "${var.instance_label}-db"
 
-  trusted_ips = [vultr_instance.app.main_ip]
+  trusted_ips = concat([vultr_instance.app.main_ip], var.db_trusted_ips)
 }

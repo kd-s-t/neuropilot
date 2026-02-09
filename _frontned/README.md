@@ -36,7 +36,7 @@ NEXTAUTH_URL=http://localhost:3000
 npm run dev
 ```
 
-Frontend at `http://localhost:3000`
+Frontend at `http://localhost:3000`. Confirm live EEG in **EEG Device Calibration**.
 
 **Troubleshooting:**
 - If port 3000 is in use, Next.js will use the next available port
@@ -58,15 +58,13 @@ npm start
 
 ## Pages
 
-- `/` - Introduction and 5-step setup (Muse streamer, NeuroPilot, practice/bind, DJI webhooks, Connect)
+- `/` - Introduction and setup
 - `/login` - Login/Register
-- `/realtime` - Real-time EEG visualization
-- `/training` - Brainwave-controlled training game (simulation)
-- `/machines` - Machine management - create and manage machines
+- `/eeg-device-calibration` - EEG Device Calibration (live brainwave data)
+- `/lab` - 3D simulation
+- `/machines` - Machine management
 - `/machines/[id]` - Machine control interface with visual control mapping
-- `/events` - Action logs table
-- `/websocket` - Raw brainwave data chart
-- `/events-component` - Detected events list
+- `/drone` - Drone view
 
 ## Tech Stack
 

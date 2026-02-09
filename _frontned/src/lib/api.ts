@@ -1,6 +1,9 @@
 declare const process: { env: Record<string, string | undefined> };
 
-const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
+const API_BASE =
+  typeof window === "undefined"
+    ? (process.env.BACKEND_URL ?? process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000")
+    : (process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000");
 const WS_BASE = API_BASE.replace(/^http/, "ws");
 const TELLO_BASE = process.env.NEXT_PUBLIC_TELLO_BASE_URL ?? "http://localhost:8888";
 

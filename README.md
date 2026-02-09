@@ -96,43 +96,7 @@ Keep the streamer running for the next steps.
 
 ### 2. Run NeuroPilot Backend and Frontend
 
-**Backend (Windows):**
-```powershell
-cd _backend
-python3 -m pip install -r requirements.txt
-python3 -m alembic upgrade head
-python3 -m uvicorn app:app --reload
-```
-
-**Backend (Mac/Linux):**
-```bash
-cd _backend
-python3 -m pip install -r requirements.txt
-python3 -m alembic upgrade head
-./start_server.sh
-# Or: python3 -m uvicorn app:app --reload
-```
-
-Backend runs at: `http://localhost:8000`. On Mac, if you start muselsl after the backend, use `POST /eeg/reconnect` to connect to the stream.
-
-**Frontend:**
-```powershell
-cd _frontned
-npm install
-```
-
-Create `.env.local`:
-```env
-BACKEND_URL=http://localhost:8000
-NEXTAUTH_SECRET=your-secret-key-here
-NEXTAUTH_URL=http://localhost:3000
-```
-
-```powershell
-npm run dev
-```
-
-Frontend runs at: `http://localhost:3000`. Confirm live EEG in **EEG Device Calibration**.
+See [_backend/README.md](./_backend/README.md) for backend setup and run. See [_frontned/README.md](./_frontned/README.md) for frontend setup and run. Backend: `http://localhost:8000`. Frontend: `http://localhost:3000`.
 
 ### 3. Practice, Train, and Bind Controls
 

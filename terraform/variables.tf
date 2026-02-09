@@ -1,7 +1,7 @@
 variable "vultr_api_key" {
   type        = string
   sensitive   = true
-  description = "Vultr API key. Set via TF_VAR_vultr_api_key or -var. Use same value as VULTR_API_KEY in .env."
+  description = "Vultr API key. Set via TF_VAR_vultr_api_key or .env."
 }
 
 variable "region" {
@@ -28,22 +28,16 @@ variable "instance_label" {
   default     = "neuropilot"
 }
 
-variable "db_password" {
-  type        = string
-  sensitive   = true
-  description = "PostgreSQL password for db user. Set via TF_VAR_db_password (e.g. from .env)."
-}
-
-variable "db_name" {
-  type        = string
-  description = "PostgreSQL database and user name. Set via TF_VAR_db_name."
-  default     = "neuropilot"
-}
-
 variable "db_plan" {
   type        = string
-  description = "Vultr managed database plan ID. List plans: API /v2/databases/plans?region=<region>"
+  description = "Vultr managed database plan ID"
   default     = "vultr-dbaas-startup-cc-1-55-2"
+}
+
+variable "db_trusted_ips" {
+  type        = list(string)
+  description = "Extra IPv4 CIDRs allowed to connect to the DB (e.g. your IP for TablePlus). VM IP is always included. Vultr only supports IPv4; use /32 (e.g. curl -4 -s ifconfig.me)."
+  default     = []
 }
 
 variable "registry_name" {
