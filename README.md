@@ -30,23 +30,25 @@ https://lablab.ai/ai-hackathons/launch-fund-ai-meets-robotics
 	<img src="https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white" /> 
 	<img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" /> 
 	<img src="https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white" /> 
+	<img src="https://img.shields.io/badge/WebSocket-010101?style=for-the-badge&logo=socket.io&logoColor=white" /> 
 	<img src="https://img.shields.io/badge/SQLAlchemy-D71F00?style=for-the-badge&logo=sqlalchemy&logoColor=white" /> 
 	<img src="https://img.shields.io/badge/NumPy-013243?style=for-the-badge&logo=numpy&logoColor=white" /> 
 	<img src="https://img.shields.io/badge/Pandas-150458?style=for-the-badge&logo=pandas&logoColor=white" /> 
 	<img src="https://img.shields.io/badge/MNE-000000?style=for-the-badge&logo=python&logoColor=white" /> 
 </div>
-
 <div align="center">
-	<img src="https://img.shields.io/badge/WebSocket-010101?style=for-the-badge&logo=socket.io&logoColor=white" /> 
 	<img src="https://img.shields.io/badge/BlueMuse-000000?style=for-the-badge&logo=windows&logoColor=white" /> 
 	<img src="https://img.shields.io/badge/muselsl-000000?style=for-the-badge&logo=apple&logoColor=white" /> 
-	<img src="https://img.shields.io/badge/Mac M1/M2-000000?style=for-the-badge&logo=apple&logoColor=white" /> 
+</div>
+<div align="center">
 	<img src="https://img.shields.io/badge/Muse 2-000000?style=for-the-badge&logo=bluetooth&logoColor=white" /> 
 	<img src="https://img.shields.io/badge/DJI Tello-000000?style=for-the-badge&logo=dji&logoColor=white" /> 
+</div>
+<div align="center">
 	<img src="https://img.shields.io/badge/Vultr-007BFC?style=for-the-badge&logo=vultr&logoColor=white" /> 
 	<img src="https://img.shields.io/badge/Terraform-7B42BC?style=for-the-badge&logo=terraform&logoColor=white" /> 
 	<img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" /> 
-	<img src="https://img.shields.io/badge/Docker%20Hub-2496ED?style=for-the-badge&logo=docker&logoColor=white" /> 
+	<img src="https://img.shields.io/badge/Vultr%20Container%20Registry-007BFC?style=for-the-badge&logo=vultr&logoColor=white" /> 
 </div>
 
 ## Architecture
@@ -55,38 +57,7 @@ https://lablab.ai/ai-hackathons/launch-fund-ai-meets-robotics
 - **Frontend**: Next.js 15 with NextAuth - Modern React application with JWT authentication, real-time visualization, and machine control interface
 - **Database**: PostgreSQL - Stores user sessions, training data, EEG recordings, machines, and control bindings
 
-## Deploy (Vultr): 1 VM + 1 managed DB
-
 **Main IP:** 45.32.121.168 — App: http://45.32.121.168:3000 | API: http://45.32.121.168:8000
-
-Terraform creates **one compute instance** (app + Docker) and **one Vultr Managed PostgreSQL** database. The VM is allowed to connect to the DB via `trusted_ips`.
-
-From your machine:
-
-```bash
-cd terraform
-source .env
-terraform apply -auto-approve
-terraform output -raw public_ip
-terraform output -raw database_url
-```
-
-On the VM (replace `VM_IP` and paste the `database_url` into `.env`):
-
-```bash
-ssh root@VM_IP
-git clone https://github.com/YOUR_ORG/neuropilot.git
-cd neuropilot
-cp .env.example .env
-# Set DATABASE_URL in .env to the value from terraform output -raw database_url
-docker compose up -d --build
-```
-
-App: **http://VM_IP:3000**. API: **http://VM_IP:8000**. DB is managed by Vultr (separate from the VM).
-
-**Container registry:** Terraform creates a Vultr Container Registry (VCR). After apply, get the host with `terraform output container_registry_host` and the name with `terraform output container_registry_name`. Generate Docker credentials in Vultr (Account → Container Registry → your registry → Generate Docker credentials), then `docker login <host>` and push images to `<host>/<name>/<image>:<tag>`.
-
-**CI: build on GitHub Actions, pull on VM.** The workflow `.github/workflows/docker-push-vultr.yml` builds backend and frontend and pushes them to VCR on push to `main`. Add these GitHub Actions secrets: `VULTR_CR_HOST` (e.g. `sgp.vultrcr.com`), `VULTR_CR_NAME` (e.g. `neuropilot`), `VULTR_CR_USER`, `VULTR_CR_PASSWORD` (from Vultr → Container Registry → Generate Docker credentials). On the VM, run `docker login <host>` with the same credentials, then `docker pull <host>/<name>/backend:latest` and `docker pull <host>/<name>/frontend:latest` and run the containers (or use a small deploy script that pulls and restarts).
 
 ## Quick Start
 
