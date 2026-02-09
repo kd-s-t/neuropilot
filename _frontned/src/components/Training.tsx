@@ -147,7 +147,8 @@ export default function Lab() {
     Object.fromEntries(BRAINWAVE_COMBINATIONS.map((c) => [c.id, 0]))
   );
   const holdTimeRef = useRef<Record<string, number>>({});
-  const [openaiSuggestion, setOpenaiSuggestion] = useState<{ use_fallback: boolean; sentence?: string; top?: string[]; rare?: string[] } | null>(null);
+  const [aiProvider, setAiProvider] = useState<"openai" | "gemini">("openai");
+  const [openaiSuggestion, setOpenaiSuggestion] = useState<{ use_fallback: boolean; sentence?: string; top?: string[]; rare?: string[]; provider?: "openai" | "gemini" } | null>(null);
   const [savedSuggestion, setSavedSuggestion] = useState<string | null>(null);
   useEffect(() => {
     setSavedSuggestion(localStorage.getItem(SUGGESTION_STORAGE_KEY));
@@ -170,12 +171,12 @@ export default function Lab() {
       if (now - lastOpenaiCallRef.current < OPENAI_THROTTLE_MS) return;
       lastOpenaiCallRef.current = now;
       api.suggestions
-        .getSuggestions(combinationCounts)
+        .getSuggestions(combinationCounts, aiProvider)
         .then(setOpenaiSuggestion)
         .catch(() => setOpenaiSuggestion({ use_fallback: true }));
     }, OPENAI_DEBOUNCE_MS);
     return () => clearTimeout(t);
-  }, [arenaMode, combinationCounts]);
+  }, [arenaMode, combinationCounts, aiProvider]);
 
   const displaySuggestion = openaiSuggestion && !openaiSuggestion.use_fallback ? openaiSuggestion : suggestion;
   const suggestionText = savedSuggestion ?? displaySuggestion.sentence;
@@ -572,12 +573,24 @@ export default function Lab() {
                     ))}
                   </ul>
                   <div className="mt-4 rounded-lg border border-border bg-muted/30 p-3 text-sm">
-                    <div className="font-medium text-foreground mb-1 flex items-center justify-between gap-2">
+                    <div className="font-medium text-foreground mb-1 flex items-center justify-between gap-2 flex-wrap">
                       <span>
                         Suggestions (complete controls)
-                        {openaiSuggestion && !openaiSuggestion.use_fallback && (
-                          <span className="ml-2 text-xs font-normal text-muted-foreground">(OpenAI)</span>
+                        {openaiSuggestion && !openaiSuggestion.use_fallback && openaiSuggestion.provider && (
+                          <span className="ml-2 text-xs font-normal text-muted-foreground">({openaiSuggestion.provider === "gemini" ? "Gemini" : "OpenAI"})</span>
                         )}
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <Label htmlFor="ai-provider" className="text-xs font-normal text-muted-foreground whitespace-nowrap">Model</Label>
+                        <select
+                          id="ai-provider"
+                          value={aiProvider}
+                          onChange={(e) => setAiProvider(e.target.value as "openai" | "gemini")}
+                          className="rounded-md border border-input bg-background px-2.5 py-1.5 text-sm font-medium text-foreground"
+                        >
+                          <option value="openai">OpenAI</option>
+                          <option value="gemini">Gemini</option>
+                        </select>
                       </span>
                     </div>
                     <p className="text-muted-foreground text-xs mb-2">

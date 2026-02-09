@@ -1,0 +1,16 @@
+services:
+  backend:
+    image: ${REGISTRY_HOST}/${REGISTRY_NAME}/backend:latest
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+    ports:
+      - "8000:8000"
+
+  frontend:
+    image: ${REGISTRY_HOST}/${REGISTRY_NAME}/frontend:latest
+    environment:
+      BACKEND_URL: http://backend:8000
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"

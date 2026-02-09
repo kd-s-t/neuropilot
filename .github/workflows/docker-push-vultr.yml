@@ -36,6 +36,8 @@ jobs:
           file: ./_frontned/Dockerfile
           push: false
           tags: frontend:${{ github.sha }}
+          build-args: |
+            NEXT_PUBLIC_BACKEND_URL=${{ secrets.NEXT_PUBLIC_BACKEND_URL }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -74,6 +76,8 @@ jobs:
           context: ./_frontned
           file: ./_frontned/Dockerfile
           push: true
+          build-args: |
+            NEXT_PUBLIC_BACKEND_URL=${{ secrets.NEXT_PUBLIC_BACKEND_URL }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           tags: |
@@ -90,9 +94,9 @@ jobs:
         with:
           host: ${{ secrets.VM_HOST }}
           username: root
-          key: ${{ secrets.VM_SSH_PRIVATE_KEY }}
+          password: ${{ secrets.VM_SSH_PASSWORD }}
           script: |
             echo "${{ secrets.VULTR_CR_PASSWORD }}" | docker login https://${{ secrets.VULTR_CR_HOST }}/${{ secrets.VULTR_CR_NAME }} -u ${{ secrets.VULTR_CR_USER }} --password-stdin
             docker pull ${{ secrets.VULTR_CR_HOST }}/${{ secrets.VULTR_CR_NAME }}/backend:latest
             docker pull ${{ secrets.VULTR_CR_HOST }}/${{ secrets.VULTR_CR_NAME }}/frontend:latest
-            cd /root/neuropilot 2>/dev/null && docker compose up -d || true
+            cd /root/neuropilot 2>/dev/null && docker compose -f docker-compose.vultr.yml up -d || true

@@ -1,4 +1,6 @@
 FROM node:20-alpine AS builder
+ARG NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
+ENV NEXT_PUBLIC_BACKEND_URL=${NEXT_PUBLIC_BACKEND_URL}
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci

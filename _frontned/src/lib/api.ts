@@ -333,11 +333,14 @@ export const api = {
   },
 
   suggestions: {
-    async getSuggestions(combinationCounts: Record<string, number>): Promise<{ use_fallback: boolean; sentence?: string; top?: string[]; rare?: string[] }> {
+    async getSuggestions(
+      combinationCounts: Record<string, number>,
+      provider: "openai" | "gemini" = "openai"
+    ): Promise<{ use_fallback: boolean; sentence?: string; top?: string[]; rare?: string[]; provider?: "openai" | "gemini" }> {
       const res = await fetch(`${API_BASE}/suggestions/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ combination_counts: combinationCounts }),
+        body: JSON.stringify({ combination_counts: combinationCounts, provider }),
       });
       if (!res.ok) return { use_fallback: true };
       return res.json();
