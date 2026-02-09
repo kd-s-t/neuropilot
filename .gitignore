@@ -1,0 +1,15 @@
+# SSH keys - never commit
+id_ed25519*
+id_rsa*
+
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+
+# macOS
+.DS_Store
+
+# Backend runtime
+_backend/action_log.txt
+_backend/.env
+_backend/.venv/
