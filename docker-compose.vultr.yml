@@ -1,6 +1,7 @@
 services:
   backend:
     image: ${REGISTRY_HOST}/${REGISTRY_NAME}/backend:latest
+    env_file: .env
     environment:
       DATABASE_URL: ${DATABASE_URL}
     ports:
@@ -8,6 +9,7 @@ services:
 
   frontend:
     image: ${REGISTRY_HOST}/${REGISTRY_NAME}/frontend:latest
+    env_file: .env
     environment:
       BACKEND_URL: http://backend:8000
     depends_on:

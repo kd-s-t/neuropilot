@@ -37,6 +37,15 @@ https://lablab.ai/ai-hackathons/launch-fund-ai-meets-robotics
 	<img src="https://img.shields.io/badge/MNE-000000?style=for-the-badge&logo=python&logoColor=white" /> 
 </div>
 <div align="center">
+	<img src="https://img.shields.io/badge/OpenAI-412991?style=for-the-badge&logo=openai&logoColor=white" /> 
+	<img src="https://img.shields.io/badge/Google_Gemini-4285F4?style=for-the-badge&logo=google&logoColor=white" /> 
+</div>
+<div align="center">
+	<img src="https://img.shields.io/badge/Flutter-02569B?style=for-the-badge&logo=flutter&logoColor=white" /> 
+	<img src="https://img.shields.io/badge/Dart-0175C2?style=for-the-badge&logo=dart&logoColor=white" /> 
+	<img src="https://img.shields.io/badge/MUI-007FFF?style=for-the-badge&logo=mui&logoColor=white" /> 
+</div>
+<div align="center">
 	<img src="https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white" /> 
 </div>
 <div align="center">
