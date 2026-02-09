@@ -1,3 +1,9 @@
+variable "vultr_api_key" {
+  type        = string
+  sensitive   = true
+  description = "Vultr API key. Set via TF_VAR_vultr_api_key or -var. Use same value as VULTR_API_KEY in .env."
+}
+
 variable "region" {
   type        = string
   description = "Vultr region code (e.g. ewr, lax, sfo)"
