@@ -6,8 +6,8 @@ variable "vultr_api_key" {
 
 variable "region" {
   type        = string
-  description = "Vultr region code (e.g. ewr, lax, sfo)"
-  default     = "ewr"
+  description = "Vultr region code"
+  default     = "sgp"
 }
 
 variable "plan" {
@@ -25,5 +25,17 @@ variable "os_id" {
 variable "instance_label" {
   type        = string
   description = "Label for the instance"
+  default     = "neuropilot"
+}
+
+variable "db_password" {
+  type        = string
+  sensitive   = true
+  description = "PostgreSQL password for db user. Set via TF_VAR_db_password (e.g. from .env)."
+}
+
+variable "db_name" {
+  type        = string
+  description = "PostgreSQL database and user name. Set via TF_VAR_db_name."
   default     = "neuropilot"
 }

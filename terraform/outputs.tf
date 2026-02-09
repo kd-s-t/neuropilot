@@ -12,3 +12,9 @@ output "ssh_user" {
   value       = "root"
   description = "SSH user for the instance"
 }
+
+output "database_url" {
+  value       = "postgresql://${var.db_name}:${var.db_password}@localhost:5432/${var.db_name}"
+  description = "PostgreSQL connection string for the backend (same VM)"
+  sensitive   = true
+}
