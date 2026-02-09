@@ -153,6 +153,8 @@ export default function Lab() {
     turnRight: false,
   });
   const lastEegCommandRef = useRef<EegCommand | null>(null);
+  const lastCountTimeRef = useRef<Record<string, number>>({});
+  const COUNT_INTERVAL_MS = 1000;
   const [combinationCounts, setCombinationCounts] = useState<Record<string, number>>(() =>
     Object.fromEntries(BRAINWAVE_COMBINATIONS.map((c) => [c.id, 0]))
   );
@@ -255,9 +257,27 @@ export default function Lab() {
         turnLeft: dAb === null && tAa === "T",
         turnRight: tAa === "A",
       };
+      const prev = lastEegCommandRef.current;
+      const now = Date.now();
+      const toIncrement: string[] = [];
+      if (prev) {
+        for (const id of CONTROL_IDS) {
+          const k = id as keyof EegCommand;
+          if (!next[k] || prev[k]) continue;
+          const last = lastCountTimeRef.current[id] ?? 0;
+          if (now - last >= COUNT_INTERVAL_MS) {
+            toIncrement.push(id);
+            lastCountTimeRef.current[id] = now;
+          }
+        }
+      }
+      if (toIncrement.length > 0) {
+        setCombinationCounts((cc) =>
+          toIncrement.reduce((acc, id) => ({ ...acc, [id]: (cc[id] ?? 0) + 1 }), { ...cc })
+        );
+      }
       eegCommandRef.current = next;
       lastEegCommandRef.current = { ...next };
-
     },
     [arenaMode]
   );
