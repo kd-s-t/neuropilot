@@ -22,19 +22,22 @@ https://lablab.ai/ai-hackathons/launch-fund-ai-meets-robotics
 	<img src="https://img.shields.io/badge/ShadCN UI-000000?style=for-the-badge&logo=vercel&logoColor=white" /> 
 	<img src="https://img.shields.io/badge/Chart.js-FF6384?style=for-the-badge&logo=chart.js&logoColor=white" /> 
 	<img src="https://img.shields.io/badge/NextAuth-000000?style=for-the-badge&logo=next.js&logoColor=white" /> 
+</div>
+<div align="center">
 	<img src="https://img.shields.io/badge/Three.js-000000?style=for-the-badge&logo=three.js&logoColor=white" /> 
 	<img src="https://img.shields.io/badge/React Flow-FF0072?style=for-the-badge&logo=react&logoColor=white" /> 
 </div>
-
 <div align="center">
 	<img src="https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white" /> 
 	<img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" /> 
-	<img src="https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white" /> 
 	<img src="https://img.shields.io/badge/WebSocket-010101?style=for-the-badge&logo=socket.io&logoColor=white" /> 
 	<img src="https://img.shields.io/badge/SQLAlchemy-D71F00?style=for-the-badge&logo=sqlalchemy&logoColor=white" /> 
 	<img src="https://img.shields.io/badge/NumPy-013243?style=for-the-badge&logo=numpy&logoColor=white" /> 
 	<img src="https://img.shields.io/badge/Pandas-150458?style=for-the-badge&logo=pandas&logoColor=white" /> 
 	<img src="https://img.shields.io/badge/MNE-000000?style=for-the-badge&logo=python&logoColor=white" /> 
+</div>
+<div align="center">
+	<img src="https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white" /> 
 </div>
 <div align="center">
 	<img src="https://img.shields.io/badge/BlueMuse-000000?style=for-the-badge&logo=windows&logoColor=white" /> 
