@@ -7,7 +7,7 @@ import numpy as np
 import os
 from config import init_db, get_db
 from routers import auth_router, eeg_router, websocket_router, training_router, machine_router, suggestions_router
-from routers.websocket import clients
+from routers.websocket import clients, has_control_trigger_subscribers
 from routers.health import router as health_router
 from controllers import EEGController, EventController
 from controllers.machine_control_service import MachineControlService
@@ -59,13 +59,18 @@ def root():
     return {"message": random.choice(WISDOM)}
 
 def process_eeg_data():
-    """Process EEG data and detect events"""
+    """Process EEG data and detect events only when simulator is open (control-triggers WS). Throttled to every 5s."""
+    import time
+    last_detect = 0
+    interval = 5.0
     while True:
-        if eeg_controller.inlet is not None and len(eeg_controller.buffer) >= eeg_controller.buffer_size:
+        now = time.monotonic()
+        if (has_control_trigger_subscribers() and eeg_controller.inlet is not None
+                and len(eeg_controller.buffer) >= eeg_controller.buffer_size and (now - last_detect) >= interval):
+            last_detect = now
             segment = np.array(eeg_controller.buffer[-eeg_controller.buffer_size:]).reshape(1, -1)
             eeg_controller.buffer = eeg_controller.buffer[-eeg_controller.buffer_size:]
             event_controller.detect_events(segment)
-        import time
         time.sleep(0.1)
 
 async def process_machine_controls():
@@ -83,15 +88,24 @@ async def process_machine_controls():
                 # Get database session
                 db = next(get_db())
                 try:
-                    # Process for all active users (you can filter by active sessions later)
                     users = db.query(User).filter(User.is_active == True).all()
+                    from routers.websocket import broadcast_control_triggered
                     for user in users:
-                        service = MachineControlService(db)
-                        await service.process_band_powers(band_powers, user_id=user.id)
+                        try:
+                            service = MachineControlService(db)
+                            await service.process_band_powers(
+                                band_powers,
+                                user_id=user.id,
+                                on_trigger=broadcast_control_triggered,
+                            )
+                        except ValueError:
+                            pass
                 finally:
                     db.close()
             
-            await asyncio.sleep(0.1)  # Check every 100ms
+            await asyncio.sleep(0.1)
+        except ValueError:
+            await asyncio.sleep(1)
         except Exception as e:
             print(f"Error in process_machine_controls: {e}")
             await asyncio.sleep(1)

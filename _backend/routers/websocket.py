@@ -2,6 +2,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import asyncio
 import json
 from datetime import datetime
+from collections import defaultdict
 from controllers import EEGController, EventController
 
 router = APIRouter(tags=["websocket"])
@@ -10,6 +11,20 @@ router = APIRouter(tags=["websocket"])
 eeg_controller = None
 event_controller = None
 clients = []
+
+control_trigger_clients = defaultdict(list)
+
+def has_control_trigger_subscribers():
+    return any(len(control_trigger_clients[mid]) > 0 for mid in control_trigger_clients)
+
+async def broadcast_control_triggered(machine_id: int, control_id: str, value=None):
+    payload = {"control_id": control_id, "value": value}
+    for ws in control_trigger_clients[machine_id][:]:
+        try:
+            await ws.send_json(payload)
+        except Exception:
+            if ws in control_trigger_clients[machine_id]:
+                control_trigger_clients[machine_id].remove(ws)
 
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -67,3 +82,26 @@ async def websocket_eeg_endpoint(websocket: WebSocket):
         print("WebSocket /ws/eeg connection closed")
     except Exception as e:
         print(f"Error in /ws/eeg: {e}")
+
+
+@router.websocket("/ws/control-triggers")
+async def websocket_control_triggers(websocket: WebSocket):
+    machine_id_str = websocket.query_params.get("machine_id")
+    if not machine_id_str:
+        await websocket.close(code=4000)
+        return
+    try:
+        machine_id = int(machine_id_str)
+    except ValueError:
+        await websocket.close(code=4000)
+        return
+    await websocket.accept()
+    control_trigger_clients[machine_id].append(websocket)
+    try:
+        while True:
+            await asyncio.sleep(3600)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        if websocket in control_trigger_clients[machine_id]:
+            control_trigger_clients[machine_id].remove(websocket)

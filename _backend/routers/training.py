@@ -65,6 +65,16 @@ def update_training_session(
         raise HTTPException(status_code=404, detail="Training session not found")
     return session
 
+@router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_training_session(
+    session_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Delete a single training session and its bindings."""
+    if not training_controller.delete_session(session_id, current_user.id, db):
+        raise HTTPException(status_code=404, detail="Training session not found")
+
 @router.delete("/sessions", status_code=status.HTTP_200_OK)
 def delete_all_training_sessions(
     current_user: User = Depends(get_current_active_user),

@@ -33,12 +33,12 @@ class EventController:
 
     def detect_events(self, segment: np.ndarray):
         try:
+            mne.set_log_level("WARNING")
             ch_names = ['EEG']
             ch_types = ['eeg']
             info = mne.create_info(ch_names=ch_names, sfreq=256, ch_types=ch_types)
             raw = mne.io.RawArray(segment, info)
-            
-            raw.filter(l_freq=1.0, h_freq=None, fir_design='firwin', filter_length='auto')
+            raw.filter(l_freq=1.0, h_freq=None, fir_design='firwin', filter_length='auto', verbose=False)
             
             data = np.abs(raw.get_data())
             max_amplitude = np.max(data)

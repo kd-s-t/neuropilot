@@ -1,15 +1,19 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
-import { Line } from "react-chartjs-2";
+import * as ReactChartJS2 from "react-chartjs-2";
 import * as Icons from "lucide-react";
+import { ChartNetwork, Unlink } from "lucide-react";
+
+const LineChartComponent = (ReactChartJS2 as any).Line as React.ComponentType<{ options: any; data: any }>;
 
 // Lightweight, loosely-typed props to avoid tight coupling with parent file
 export default function ControlNode({ data }: any) {
-  const { control, binding, boundSession, onControlClick, selectedControl, onWebhookTrigger, webhookLoading } = data;
+  const { control, binding, boundSession, onControlClick, selectedControl, onWebhookTrigger, webhookLoading, onUnbind, unbindLoading } = data;
+  const [graphVisible, setGraphVisible] = useState(true);
 
   const buttonVariant = selectedControl === control.id ? "default" : "outline";
 
@@ -30,30 +34,29 @@ export default function ControlNode({ data }: any) {
   const chartLabels = timestamps.length > 0
     ? timestamps.map((t: number, i: number) => (i % Math.ceil(timestamps.length / 5) === 0 ? `${((t - timestamps[0]) / 1000).toFixed(0)}s` : ""))
     : bandPowers.map((_: any, i: number) => (i % Math.ceil(bandPowers.length / 5) === 0 ? String(i) : ""));
+  const bands = ["Delta", "Theta", "Alpha", "Beta", "Gamma"] as const;
+  const bandColors = [
+    { border: "rgba(255, 99, 132, 1)", fill: "rgba(255, 99, 132, 0.15)" },
+    { border: "rgba(54, 162, 235, 1)", fill: "rgba(54, 162, 235, 0.15)" },
+    { border: "rgba(255, 206, 86, 1)", fill: "rgba(255, 206, 86, 0.15)" },
+    { border: "rgba(75, 192, 192, 1)", fill: "rgba(75, 192, 192, 0.15)" },
+    { border: "rgba(153, 102, 255, 1)", fill: "rgba(153, 102, 255, 0.15)" },
+  ];
   const chartData = {
     labels: chartLabels,
-    datasets: [
-      {
-        label: "Alpha",
-        data: bandPowers.map((bp: any) => (bp.Alpha?.power ?? 0) as number),
-        borderColor: "rgba(54, 162, 235, 1)",
-        backgroundColor: "rgba(54, 162, 235, 0.1)",
-        fill: true,
-        tension: 0.2,
-      },
-      {
-        label: "Beta",
-        data: bandPowers.map((bp: any) => (bp.Beta?.power ?? 0) as number),
-        borderColor: "rgba(255, 206, 86, 1)",
-        backgroundColor: "rgba(255, 206, 86, 0.1)",
-        fill: true,
-        tension: 0.2,
-      },
-    ],
+    datasets: bands.map((band, i) => ({
+      label: band,
+      data: bandPowers.map((bp: any) => (bp[band]?.power ?? 0) as number),
+      borderColor: bandColors[i].border,
+      backgroundColor: bandColors[i].fill,
+      fill: true,
+      tension: 0.2,
+    })),
   };
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
+    devicePixelRatio: typeof window !== "undefined" ? Math.min(window.devicePixelRatio, 2) : 1,
     plugins: { legend: { display: false }, tooltip: { enabled: false } },
     scales: { x: { display: false }, y: { display: false } },
   };
@@ -63,7 +66,7 @@ export default function ControlNode({ data }: any) {
       className="flex flex-col items-center gap-1"
       initial={data.motion?.initial ?? { scale: 0.97, opacity: 0 }}
       animate={data.motion?.animate ?? { scale: 1, opacity: 1 }}
-      whileHover={data.motion?.whileHover ?? { scale: 1.03 }}
+      whileHover={data.motion?.whileHover ?? { scale: 1 }}
       whileTap={data.motion?.whileTap ?? { scale: 0.98 }}
       transition={{ type: "spring", stiffness: 400, damping: 28 }}
     >
@@ -89,17 +92,28 @@ export default function ControlNode({ data }: any) {
             </div>
           </Button>
           {binding && (
-            <span className="absolute top-0 right-0 text-[5px] bg-green-500 text-white px-0.5 py-0 rounded">
+            <span className={`absolute top-0 text-[5px] bg-green-500 text-white px-0.5 py-0 rounded ${binding && boundSession ? "right-[14px]" : "right-0"}`}>
               Bound
             </span>
           )}
+          {binding && boundSession && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setGraphVisible((v) => !v)}
+              className="absolute top-0 right-0 h-[10px] w-[10px] p-0 flex items-center justify-center [&_svg]:!size-[10px]"
+              title={graphVisible ? "Hide graph" : "Show graph"}
+            >
+              <ChartNetwork className="size-[10px]" />
+            </Button>
+          )}
         </div>
-        {binding && boundSession && (
+        {binding && boundSession && graphVisible && (
           <div className="flex flex-col gap-0.5 w-[180px]">
             <div className="h-[40px]">
             <div className="h-full rounded border border-border bg-muted/50 p-1">
               {bandPowers.length > 0 ? (
-                <Line options={chartOptions as any} data={chartData as any} />
+                <LineChartComponent options={chartOptions as any} data={chartData as any} />
               ) : (
                 <p className="flex h-full items-center justify-center text-[7px] text-muted-foreground">
                   No data
@@ -110,24 +124,38 @@ export default function ControlNode({ data }: any) {
           </div>
         )}
       </div>
-      {(control as any).webhook_url && onWebhookTrigger && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => onWebhookTrigger(control)}
-          disabled={webhookLoading}
-          className="h-[10px] w-[10px] p-0 flex items-center justify-center self-start"
-          title="Trigger webhook"
-        >
-          <Image
-            src="/webhooks.png"
-            alt="Trigger webhook"
-            width={10}
-            height={10}
-            className={`object-contain w-full h-full origin-[51%_49%] ${webhookLoading ? "animate-spin" : ""}`}
-          />
-        </Button>
-      )}
+      <div className="flex items-center gap-1 self-start">
+        {(control as any).webhook_url && onWebhookTrigger && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onWebhookTrigger(control)}
+            disabled={webhookLoading}
+            className="h-[10px] w-[10px] p-0 flex items-center justify-center"
+            title="Trigger webhook"
+          >
+            <Image
+              src="/webhooks.png"
+              alt="Trigger webhook"
+              width={10}
+              height={10}
+              className={`object-contain w-full h-full origin-[51%_49%] ${webhookLoading ? "animate-spin" : ""}`}
+            />
+          </Button>
+        )}
+        {binding && onUnbind && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onUnbind(binding.id)}
+            disabled={unbindLoading}
+            className="h-[10px] w-[10px] p-0 flex items-center justify-center [&_svg]:!size-[10px]"
+            title="Unbind"
+          >
+            <Unlink className="size-[10px]" />
+          </Button>
+        )}
+      </div>
     </motion.div>
   );
 }

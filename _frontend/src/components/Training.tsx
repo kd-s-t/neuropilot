@@ -335,10 +335,9 @@ export default function Lab() {
   }, [isListening, isRecording, token]);
 
   const handleVoiceStart = useCallback(() => {
-    if (!isListening && !currentSessionId) {
-      setIsListening(true);
-    }
-  }, [isListening, currentSessionId]);
+    if (!isListening) setIsListening(true);
+    setIsRecording(true);
+  }, [isListening]);
 
   const stopSessionOnly = useCallback(async () => {
     const sessionIdToEnd = currentSessionIdRef.current ?? currentSessionId;
@@ -353,13 +352,10 @@ export default function Lab() {
 
     if (sessionIdToEnd && hasToken) {
       try {
-        const trimMs = 2000;
-        const firstTs = dataToSend[0]?.timestamp ?? 0;
-        const trimmed = dataToSend.filter((d) => d.timestamp - firstTs >= trimMs);
         const payload = {
-          positions: trimmed.map((d) => d.position),
-          bandPowers: trimmed.map((d) => d.bandPowers),
-          timestamps: trimmed.map((d) => d.timestamp),
+          positions: dataToSend.map((d) => d.position),
+          bandPowers: dataToSend.map((d) => d.bandPowers),
+          timestamps: dataToSend.map((d) => d.timestamp),
           final_position: position,
         };
         await api.training.endSession(sessionIdToEnd, payload, token ?? undefined);
@@ -752,6 +748,22 @@ export default function Lab() {
                       </span>
                     )}
                     <span className="text-sm text-muted-foreground">View details →</span>
+                    {token && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          try {
+                            await api.training.deleteSession(s.id, token);
+                            await refetch();
+                          } catch (_) {}
+                        }}
+                      >
+                        Delete
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))}

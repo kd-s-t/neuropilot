@@ -217,6 +217,12 @@ export const api = {
       return handleRes(res);
     },
 
+    async deleteSession(sessionId: number, token?: string | null): Promise<void> {
+      const res = await fetch(`${API_BASE}/training/sessions/${sessionId}`, { method: "DELETE", headers: headers(token) });
+      if (res.status === 404) throw new Error("Session not found");
+      if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
+    },
+
     async deleteAllSessions(token?: string | null): Promise<{ deleted_bindings: number; deleted_sessions: number }> {
       const res = await fetch(`${API_BASE}/training/sessions`, { method: "DELETE", headers: headers(token) });
       return handleRes(res);
@@ -239,8 +245,20 @@ export const api = {
     },
 
     async get(machineId: number, token?: string | null): Promise<{ id: number; user_id: number; name: string; type: string; control_positions?: Array<{ id: string; description?: string; x: number; y: number; icon?: string; bgColor?: string; webhook_url?: string }> | null; blueprint?: string | null; created_at: string }> {
-      const res = await fetch(`${API_BASE}/machines/${machineId}`, { headers: headers(token) });
-      return handleRes(res);
+      const timeoutMs = 12000;
+      const c = new AbortController();
+      const t = setTimeout(() => c.abort(), timeoutMs);
+      try {
+        const res = await fetch(`${API_BASE}/machines/${machineId}`, { headers: headers(token), signal: c.signal });
+        clearTimeout(t);
+        return handleRes(res);
+      } catch (err) {
+        clearTimeout(t);
+        if (err instanceof Error && err.name === "AbortError") {
+          throw new Error("Backend unreachable. Is it running at " + API_BASE + "?");
+        }
+        throw err;
+      }
     },
 
     async delete(machineId: number, token?: string | null): Promise<void> {
@@ -273,8 +291,20 @@ export const api = {
     },
 
     async getBindings(machineId: number, token?: string | null): Promise<{ id: number; machine_id: number; control_id: string; training_session_id: number; user_id: number; created_at: string }[]> {
-      const res = await fetch(`${API_BASE}/machines/${machineId}/bindings`, { headers: headers(token) });
-      return handleRes(res);
+      const timeoutMs = 12000;
+      const c = new AbortController();
+      const t = setTimeout(() => c.abort(), timeoutMs);
+      try {
+        const res = await fetch(`${API_BASE}/machines/${machineId}/bindings`, { headers: headers(token), signal: c.signal });
+        clearTimeout(t);
+        return handleRes(res);
+      } catch (err) {
+        clearTimeout(t);
+        if (err instanceof Error && err.name === "AbortError") {
+          throw new Error("Backend unreachable. Is it running at " + API_BASE + "?");
+        }
+        throw err;
+      }
     },
 
     async getControlBinding(machineId: number, controlId: string, token?: string | null): Promise<{ id: number; machine_id: number; control_id: string; training_session_id: number; user_id: number; created_at: string }> {
@@ -353,6 +383,9 @@ export const api = {
     },
     createEeg(): WebSocket {
       return new WebSocket(`${WS_BASE}/ws/eeg`);
+    },
+    createControlTriggers(machineId: number): WebSocket {
+      return new WebSocket(`${WS_BASE}/ws/control-triggers?machine_id=${machineId}`);
     },
   },
 };

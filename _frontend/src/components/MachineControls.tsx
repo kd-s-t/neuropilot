@@ -66,6 +66,7 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
   const [bindings, setBindings] = useState<Binding[]>([]);
   const [loading, setLoading] = useState(false);
   const [bindingLoading, setBindingLoading] = useState<number | null>(null);
+  const [unbindingId, setUnbindingId] = useState<number | null>(null);
   const [boundSessions, setBoundSessions] = useState<Record<string, TrainingSession>>({});
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
@@ -294,6 +295,22 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
     }
   };
 
+  const handleUnbind = useCallback(async (bindingId: number) => {
+    if (!token) return;
+    setUnbindingId(bindingId);
+    setBindingError(null);
+    try {
+      await api.machines.deleteBinding(bindingId, token);
+      await fetchBindings();
+    } catch (err) {
+      const error = err as Error;
+      setBindingError(error.message || String(err));
+      toast.danger(`Failed to unbind: ${error.message || String(err)}`);
+    } finally {
+      setUnbindingId(null);
+    }
+  }, [token, fetchBindings]);
+
   // Extract controls from control_positions only
   const controls = useMemo(() => {
     if (machine.control_positions && machine.control_positions.length > 0) {
@@ -512,6 +529,13 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
     const updatedControls: Control[] = controls.filter(c => c.id !== controlId);
     try {
       await handleSaveControls(updatedControls, { silent: true });
+      const bindingsToRemove = bindings.filter((b) => b.control_id === controlId);
+      for (const b of bindingsToRemove) {
+        await api.machines.deleteBinding(b.id, token);
+      }
+      if (bindingsToRemove.length > 0) {
+        await fetchBindings();
+      }
       toast.success(`Control "${controlName}" deleted`);
       if (pendingControlId === controlId) {
         setShowControlChoiceDialog(false);
@@ -567,7 +591,8 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
               selectedControl,
               onWebhookTrigger: handleWebhookTrigger,
               webhookLoading: webhookLoading === control.id,
-              
+              onUnbind: handleUnbind,
+              unbindLoading: unbindingId === binding?.id,
             },
           };
         });
@@ -601,6 +626,8 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
             selectedControl,
             onWebhookTrigger: handleWebhookTrigger,
             webhookLoading: webhookLoading === control.id,
+            onUnbind: handleUnbind,
+            unbindLoading: unbindingId === binding?.id,
               // per-node framer-motion options (can be customized per control)
               motion: {
                 initial: { scale: 0.97, opacity: 0 },
@@ -624,7 +651,7 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
       
       return initialNodes;
     });
-  }, [bindings, boundSessions, selectedControl, handleControlClick, controls, webhookLoading, handleWebhookTrigger]);
+  }, [bindings, boundSessions, selectedControl, handleControlClick, controls, webhookLoading, handleWebhookTrigger, handleUnbind, unbindingId]);
 
   const onNodesChange: OnNodesChange = useCallback((changes) => {
     setNodes((nds) => {
@@ -1367,14 +1394,16 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
           ) : (
             <div className="space-y-4">
               {sessions.map((session) => {
-                const isBoundToCurrent = bindings.some(
+                const bindingToCurrent = bindings.find(
                   (b) => b.control_id === selectedControl && b.training_session_id === session.id
                 );
+                const isBoundToCurrent = !!bindingToCurrent;
                 const boundToOther = bindings.find(
                   (b) => b.training_session_id === session.id && b.control_id !== selectedControl
                 );
                 const isBound = isBoundToCurrent || !!boundToOther;
-                
+                const unbindingThis = bindingToCurrent && unbindingId === bindingToCurrent.id;
+
                 return (
                   <Card key={session.id}>
                     <CardHeader>
@@ -1401,14 +1430,27 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
                             )}
                           </CardDescription>
                         </div>
-                        <Button
-                          onClick={() => handleBindSession(session.id)}
-                          disabled={isBound || bindingLoading === session.id}
-                          size="sm"
-                          variant={boundToOther ? "outline" : "default"}
-                        >
-                          {bindingLoading === session.id ? "Binding..." : isBoundToCurrent ? "Bound" : boundToOther ? "Already Bound" : "Bind"}
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          {isBoundToCurrent ? (
+                            <Button
+                              onClick={() => bindingToCurrent && handleUnbind(bindingToCurrent.id)}
+                              disabled={unbindingThis}
+                              size="sm"
+                              variant="outline"
+                            >
+                              {unbindingThis ? "Unbinding..." : "Unbind"}
+                            </Button>
+                          ) : (
+                            <Button
+                              onClick={() => handleBindSession(session.id)}
+                              disabled={!!boundToOther || bindingLoading === session.id}
+                              size="sm"
+                              variant={boundToOther ? "outline" : "default"}
+                            >
+                              {bindingLoading === session.id ? "Binding..." : boundToOther ? "Already Bound" : "Bind"}
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     </CardHeader>
                     <CardContent>

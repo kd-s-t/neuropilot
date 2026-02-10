@@ -1,8 +1,15 @@
 """
 Machine Control Service
-Detects brainwave patterns and triggers machine controls via webhooks
+Detects brainwave patterns and triggers machine controls via webhooks.
+
+Match modes (env MATCH_MODE):
+- strict: relative-vector similarity >= 0.75 (shape of distribution).
+- approximate: relative-vector similarity >= 0.60 (looser shape match).
+- ordinal: match when band order is preserved (e.g. training beta>theta and live beta>theta).
+  Absolute values ignored; e.g. saved beta=100 theta=10, live beta=1000 theta=100 still matches.
 """
 
+import os
 import httpx
 import asyncio
 import json
@@ -13,26 +20,39 @@ from sqlalchemy.orm import Session
 from models import Machine, MachineControlBinding, TrainingSession, MachineLog
 from controllers import MachineController
 
+SIMILARITY_STRICT = 0.75
+WEBHOOK_ERROR_LOG_INTERVAL = 60.0
+_last_webhook_error_log: Dict[str, datetime] = {}
+SIMILARITY_APPROXIMATE = 0.60
+_SENTINEL_OLD = datetime(1970, 1, 1)
+
 class MachineControlService:
     """Service to process brainwave patterns and trigger machine controls"""
-    
+
     def __init__(self, db: Session):
         self.db = db
         self.machine_controller = MachineController()
-        self.last_command_time: Dict[str, datetime] = defaultdict(lambda: datetime.min)
-        self.min_command_interval = 0.5  # seconds between same command
+        self.last_command_time: Dict[str, datetime] = defaultdict(lambda: _SENTINEL_OLD)
+        self.min_command_interval = 0.5
+        _mode = os.environ.get("MATCH_MODE", "strict").lower()
+        self._match_mode = "ordinal" if _mode == "ordinal" else ("approximate" if _mode == "approximate" else "strict")
+        self._similarity_threshold = (
+            SIMILARITY_APPROXIMATE if self._match_mode == "approximate" else SIMILARITY_STRICT
+        )
         
     async def process_band_powers(
-        self, 
-        band_powers: Dict[str, Dict[str, float]], 
-        user_id: int
+        self,
+        band_powers: Dict[str, Dict[str, float]],
+        user_id: int,
+        on_trigger=None,
     ) -> None:
         """
         Process brainwave band powers and trigger machine controls
-        
+
         Args:
             band_powers: Current band powers from EEG
             user_id: User ID to find their machines
+            on_trigger: Optional async callback(machine_id, control_id, value) when a webhook is triggered (e.g. to broadcast to 3D simulator).
         """
         # Get all active machines for this user
         machines = self.machine_controller.get_user_machines(user_id, self.db)
@@ -70,69 +90,117 @@ class MachineControlService:
                     
                     if time_since_last >= self.min_command_interval:
                         self.last_command_time[control_key] = now
-                        # Trigger webhook for this specific control with value
                         await self._trigger_webhook(
                             machine.id,
                             webhook_url,
                             binding.control_id,
-                            control_value
+                            control_value,
+                            on_trigger=on_trigger,
                         )
     
+    def _training_signature(self, session: TrainingSession) -> Optional[Dict[str, float]]:
+        """Average band powers from session.data['bandPowers'] for this bound control."""
+        data = session.data if isinstance(session.data, dict) else {}
+        band_list = data.get("bandPowers") or []
+        if not band_list:
+            return None
+        bands = ["Delta", "Theta", "Alpha", "Beta", "Gamma"]
+        sums = {b: 0.0 for b in bands}
+        count = 0
+        for bp in band_list:
+            if not isinstance(bp, dict):
+                continue
+            for b in bands:
+                val = bp.get(b) if isinstance(bp.get(b), dict) else None
+                if val is not None and "power" in val:
+                    sums[b] += float(val["power"])
+            count += 1
+        if count == 0:
+            return None
+        return {b: sums[b] / count for b in bands}
+
+    def _current_vector(self, band_powers: Dict) -> Dict[str, float]:
+        """Extract current band power vector from live EEG."""
+        band_dict = band_powers if isinstance(band_powers, dict) else {}
+        bands = ["Delta", "Theta", "Alpha", "Beta", "Gamma"]
+        return {
+            b: float((band_dict.get(b) or {}).get("power", 0) or 0)
+            for b in bands
+        }
+
+    def _relative_vector(self, vec: Dict[str, float]) -> Dict[str, float]:
+        """Normalize to relative (sum=1) for scale-invariant comparison."""
+        total = sum(vec.values()) or 1.0
+        return {k: v / total for k, v in vec.items()}
+
+    def _similarity(self, rel_a: Dict[str, float], rel_b: Dict[str, float]) -> float:
+        """Cosine similarity of two relative vectors (both non-negative, sum=1)."""
+        bands = ["Delta", "Theta", "Alpha", "Beta", "Gamma"]
+        dot = sum((rel_a.get(b, 0) * rel_b.get(b, 0) for b in bands))
+        return dot
+
+    def _ordinal_matches(self, signature: Dict[str, float], current: Dict[str, float]) -> bool:
+        """True if every pairwise order in signature is preserved in current (e.g. theta < beta in both)."""
+        bands = ["Delta", "Theta", "Alpha", "Beta", "Gamma"]
+        for i, a in enumerate(bands):
+            for b in bands[i + 1 :]:
+                sa, sb = signature.get(a, 0), signature.get(b, 0)
+                ca, cb = current.get(a, 0), current.get(b, 0)
+                if sa > sb and not (ca > cb):
+                    return False
+                if sa < sb and not (ca < cb):
+                    return False
+        return True
+
     def _pattern_matches(
-        self, 
-        band_powers: Dict[str, Dict[str, float]], 
+        self,
+        band_powers: Dict[str, Dict[str, float]],
         training_session_id: int,
         user_id: int
     ) -> bool:
         """
-        Check if current band powers match training session pattern
-        
-        TODO: Implement actual pattern matching against training session data
-        For now, uses simple threshold-based detection
+        True if current band powers match this binding's training session pattern.
+        Uses average band powers from the session and compares relative (normalized) vectors.
         """
-        # Get training session data
         session = self.db.query(TrainingSession).filter(
             TrainingSession.id == training_session_id,
             TrainingSession.user_id == user_id
         ).first()
-        
+
         if not session or not session.data:
             return False
-        
-        # Extract current band powers
-        alpha = band_powers.get("Alpha", {}).get("power", 0)
-        beta = band_powers.get("Beta", {}).get("power", 0)
-        delta = band_powers.get("Delta", {}).get("power", 0)
-        theta = band_powers.get("Theta", {}).get("power", 0)
-        gamma = band_powers.get("Gamma", {}).get("power", 0)
-        
-        total_power = alpha + beta + delta + theta + gamma
-        
-        if total_power < 1000:
+
+        signature = self._training_signature(session)
+        if not signature:
             return False
-        
-        # Simple threshold-based matching
-        # TODO: Compare against actual training session band power patterns
-        rel_alpha = alpha / total_power if total_power > 0 else 0
-        rel_beta = beta / total_power if total_power > 0 else 0
-        
-        # Trigger if high alpha + beta (focused thought)
-        if rel_alpha > 0.3 and rel_beta > 0.25:
-            return True
-        
-        # Trigger if very high total power
-        if total_power > 200000:
-            return True
-        
-        return False
+
+        current = self._current_vector(band_powers)
+        total_power = sum(current.values())
+        if total_power < 50:
+            return False
+
+        if self._match_mode == "ordinal":
+            return self._ordinal_matches(signature, current)
+
+        rel_current = self._relative_vector(current)
+        rel_signature = self._relative_vector(signature)
+        sim = self._similarity(rel_current, rel_signature)
+        return sim >= self._similarity_threshold
     
-    async def _trigger_webhook(self, machine_id: int, webhook_url: str, control_id: str, value: Optional[int] = None) -> None:
-        """Call webhook to execute machine command and log the result"""
+    async def _trigger_webhook(
+        self,
+        machine_id: int,
+        webhook_url: str,
+        control_id: str,
+        value: Optional[int] = None,
+        on_trigger=None,
+    ) -> None:
+        """Call webhook to execute machine command and log the result."""
         success = False
         status_code = None
         error_message = None
         response_data = None
-        
+
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 response = await client.post(
@@ -155,10 +223,18 @@ class MachineControlService:
                     print(f"✓ Webhook triggered: {control_id} -> {webhook_url} (success: {success})")
                 else:
                     error_message = f"HTTP {response.status_code}: {response.text[:500]}"
-                    print(f"✗ Webhook failed: {control_id} -> {webhook_url} (status: {response.status_code})")
+                    key = f"{webhook_url}:{control_id}"
+                    now = datetime.now()
+                    if now.timestamp() - _last_webhook_error_log.get(key, _SENTINEL_OLD).timestamp() >= WEBHOOK_ERROR_LOG_INTERVAL:
+                        _last_webhook_error_log[key] = now
+                        print(f"✗ Webhook failed: {control_id} -> {webhook_url} (status: {response.status_code})")
         except Exception as e:
-            error_message = str(e)[:1000]  # Limit to 1000 chars
-            print(f"✗ Webhook error: {control_id} -> {webhook_url} (error: {e})")
+            error_message = str(e)[:1000]
+            key = f"{webhook_url}:{control_id}"
+            now = datetime.now()
+            if now.timestamp() - _last_webhook_error_log.get(key, _SENTINEL_OLD).timestamp() >= WEBHOOK_ERROR_LOG_INTERVAL:
+                _last_webhook_error_log[key] = now
+                print(f"✗ Webhook error: {control_id} -> {webhook_url} (error: {e})")
         finally:
             # Log the webhook call
             log = MachineLog(
@@ -173,3 +249,8 @@ class MachineControlService:
             )
             self.db.add(log)
             self.db.commit()
+        if on_trigger:
+            try:
+                await on_trigger(machine_id, control_id, value)
+            except Exception:
+                pass

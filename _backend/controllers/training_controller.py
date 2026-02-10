@@ -85,6 +85,18 @@ class TrainingController:
         
         return self.action_classifier.classify_session(session.data)
 
+    def delete_session(self, session_id: int, user_id: int, db: Session) -> bool:
+        """Delete one training session and any bindings that reference it. Returns True if deleted."""
+        session = self.get_session(session_id, user_id, db)
+        if not session:
+            return False
+        db.query(MachineControlBinding).filter(
+            MachineControlBinding.training_session_id == session_id
+        ).delete(synchronize_session=False)
+        db.delete(session)
+        db.commit()
+        return True
+
     def delete_all_sessions_and_bindings(self, db: Session) -> tuple[int, int]:
         """Delete all machine_control_bindings then all training_sessions. Returns (n_bindings, n_sessions)."""
         bindings = db.query(MachineControlBinding).all()

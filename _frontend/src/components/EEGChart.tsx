@@ -30,7 +30,7 @@ type EEGData = {
   [K in (typeof bands)[number]]: { power: number[]; range: [number, number] };
 };
 
-export default function EEGChart({ eegData }: { eegData: EEGData }) {
+export default function EEGChart({ eegData, className = "h-[500px] w-full" }: { eegData: EEGData; className?: string }) {
   const options = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
@@ -111,7 +111,7 @@ export default function EEGChart({ eegData }: { eegData: EEGData }) {
   }, [eegData]);
 
   return (
-    <div className="h-[500px] w-full">
+    <div className={className}>
       <Line options={options} data={chartData} />
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
@@ -10,8 +10,11 @@ import MachineControls from "@/components/MachineControls";
 import { api } from "@/lib/api";
 import React from "react";
 import DroneScene from "@/components/DroneScene";
+import type { EegCommand } from "@/components/DroneScene";
 import TelloCamera from "@/components/TelloCamera";
 import BrainwavePanel from "@/components/BrainwavePanel";
+import EEGChart from "@/components/EEGChart";
+import { useEegWebSocket } from "@/hooks";
 import Image from "next/image";
 import { Plus, Drone, Battery, BatteryLow, BatteryMedium, BatteryFull, WifiOff, RadioTower } from "lucide-react";
 import {
@@ -34,7 +37,7 @@ type Machine = {
 export default function MachinePage() {
   const params = useParams();
   const router = useRouter();
-  const { data: session } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
   const token = (session as { accessToken?: string } | null)?.accessToken ?? null;
 
   const [machine, setMachine] = useState<Machine | null>(null);
@@ -53,30 +56,111 @@ export default function MachinePage() {
   const [logsLoading, setLogsLoading] = useState(false);
   const [bindings, setBindings] = useState<string[]>([]);
   const [connectBattery, setConnectBattery] = useState<number | null>(null);
+  const [lastTriggeredControl, setLastTriggeredControl] = useState<string | null>(null);
+
+  const SIMULATOR_EEG_INITIAL = {
+    Delta: { power: [] as number[], range: [0.5, 4] as [number, number] },
+    Theta: { power: [] as number[], range: [4, 8] as [number, number] },
+    Alpha: { power: [] as number[], range: [8, 13] as [number, number] },
+    Beta: { power: [] as number[], range: [13, 30] as [number, number] },
+    Gamma: { power: [] as number[], range: [30, 100] as [number, number] },
+  };
+  const [simulatorEegData, setSimulatorEegData] = useState(SIMULATOR_EEG_INITIAL);
+  const handleSimulatorEegMessage = useCallback(
+    (data: Record<string, { power: number; range?: [number, number] }>) => {
+      const hasValid = Object.values(data).some((b) => b && typeof b.power === "number");
+      if (!hasValid) return;
+      setSimulatorEegData((prev) => ({
+        Delta: { ...prev.Delta, power: [...prev.Delta.power, data.Delta?.power ?? 0].slice(-100) },
+        Theta: { ...prev.Theta, power: [...prev.Theta.power, data.Theta?.power ?? 0].slice(-100) },
+        Alpha: { ...prev.Alpha, power: [...prev.Alpha.power, data.Alpha?.power ?? 0].slice(-100) },
+        Beta: { ...prev.Beta, power: [...prev.Beta.power, data.Beta?.power ?? 0].slice(-100) },
+        Gamma: { ...prev.Gamma, power: [...prev.Gamma.power, data.Gamma?.power ?? 0].slice(-100) },
+      }));
+    },
+    []
+  );
+  useEegWebSocket({ enabled: showSimulator, onMessage: handleSimulatorEegMessage });
 
   const machineId = params?.id ? parseInt(params.id as string) : null;
 
+  const simulatorEegCommandRef = useRef<EegCommand>({
+    start: false,
+    up: false,
+    down: false,
+    left: false,
+    right: false,
+    forward: false,
+    back: false,
+    turnLeft: false,
+    turnRight: false,
+  });
+
   useEffect(() => {
-    if (!token || !machineId) {
+    if (!showSimulator || machineId == null) return;
+    const ws = api.ws.createControlTriggers(machineId);
+    const controlIdToKey: Record<string, keyof EegCommand> = {
+      Start: "start",
+      Forward: "forward",
+      Reverse: "back",
+      Left: "left",
+      Right: "right",
+      Up: "up",
+      Down: "down",
+      "Turn Left": "turnLeft",
+      "Turn Right": "turnRight",
+    };
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data as string) as { control_id?: string };
+        const controlId = data.control_id;
+        if (controlId != null) setLastTriggeredControl(controlId);
+        const key = controlId != null ? controlIdToKey[controlId] : undefined;
+        if (key && simulatorEegCommandRef.current) {
+          simulatorEegCommandRef.current[key] = true;
+          const durationMs = key === "start" ? 4000 : 200;
+          window.setTimeout(() => {
+            if (simulatorEegCommandRef.current) simulatorEegCommandRef.current[key] = false;
+          }, durationMs);
+        }
+      } catch (_) {}
+    };
+    return () => {
+      ws.close();
+    };
+  }, [showSimulator, machineId]);
+
+  useEffect(() => {
+    if (!machineId) {
       setLoading(false);
       return;
     }
+    if (sessionStatus === "loading") {
+      return;
+    }
+    if (sessionStatus === "unauthenticated" || !token) {
+      setLoading(false);
+      setError("Please log in to view this machine.");
+      return;
+    }
 
+    setError(null);
     const fetchMachine = async () => {
       try {
         const data = await api.machines.get(machineId, token);
         setMachine(data);
         setMachineState(data);
       } catch (err) {
-        console.error("Error fetching machine:", err);
-        setError("Machine not found");
+        const msg = err instanceof Error ? err.message : "";
+        const isNetwork = msg === "Failed to fetch" || msg.includes("Unable to connect");
+        setError(isNetwork ? "Backend unreachable. Is it running on port 8000?" : (msg || "Machine not found"));
       } finally {
         setLoading(false);
       }
     };
 
     fetchMachine();
-  }, [token, machineId]);
+  }, [token, machineId, sessionStatus]);
 
   useEffect(() => {
     if (!showConnectModal) return;
@@ -182,10 +266,16 @@ export default function MachinePage() {
   }
 
   if (error) {
+    const isBackendUnreachable = error.includes("Backend unreachable");
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
+        <div className="text-center max-w-md">
           <p className="text-destructive mb-4">{error || "Machine not found"}</p>
+          {isBackendUnreachable && (
+            <p className="text-sm text-muted-foreground mb-4">
+              Open this page from the frontend (e.g. http://localhost:3000/machines/5), not from port 8000. Start backend: cd _backend && uvicorn app:app --reload --port 8000
+            </p>
+          )}
           <Button onClick={() => router.push("/machines")}>Back to Machines</Button>
         </div>
       </div>
@@ -251,6 +341,11 @@ export default function MachinePage() {
                   <Plus className="mr-2 h-4 w-4" />
                   Add New Control
                 </Button>
+                {(!machineState?.control_positions || machineState.control_positions.length === 0) && (
+                  <span className="text-sm text-muted-foreground hidden sm:inline">
+                    No controls yet. Click to add (e.g. forward, back, left, right, up, down, turnLeft, turnRight).
+                  </span>
+                )}
               </motion.div>
               <motion.div
                 initial={{ opacity: 0, x: 20 }}
@@ -353,19 +448,24 @@ export default function MachinePage() {
         />
       </motion.div>
       <Dialog open={showSimulator} onOpenChange={setShowSimulator}>
-        <DialogContent className="max-w-6xl w-[90vw] h-[80vh]">
-          <DialogHeader>
+        <DialogContent className="max-w-6xl w-[90vw] h-[80vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <div className="flex items-center justify-between">
               <div className="flex-1">
-                <DialogTitle>Simulator</DialogTitle>
+                <DialogTitle>3D Simulator</DialogTitle>
               </div>
               <Button variant="ghost" size="sm" onClick={() => setShowSimulator(false)} className="h-8 w-8 p-0">×</Button>
             </div>
           </DialogHeader>
-          <div className="w-full h-[calc(100%-80px)]">
-            <div className="w-full h-full rounded border border-border overflow-hidden">
-              <DroneScene className="w-full h-full" controls={machineState.control_positions && machineState.control_positions.length > 0 ? "eeg" : "keyboard"} />
+          <div className="w-full min-h-[400px] flex-1 rounded border border-border overflow-hidden">
+              <DroneScene className="w-full h-full" controls={machineState?.control_positions && machineState.control_positions.length > 0 ? "eeg" : "keyboard"} eegCommandRef={simulatorEegCommandRef} />
             </div>
+            <div className="w-full h-[150px] flex-shrink-0 rounded border border-border overflow-hidden bg-muted/30">
+              <EEGChart eegData={simulatorEegData} className="w-full h-full" />
+            </div>
+            <p className="text-sm text-muted-foreground mt-1">
+              {lastTriggeredControl != null ? `Last triggered: ${lastTriggeredControl}` : "Last triggered: —"}
+            </p>
             {/* If required controls missing, show a small red log below.
                 Consider both saved control_positions and machine bindings, normalize ids and map synonyms. */}
             {(() => {
@@ -391,7 +491,7 @@ export default function MachinePage() {
               const required = ["forward","back","left","right","up","down","turnleft","turnright"];
 
               const presentIds = new Set<string>();
-              (machineState.control_positions || []).forEach((c: any) => {
+              (machineState?.control_positions || []).forEach((c: any) => {
                 presentIds.add(normalize(String(c.id)));
               });
               (bindings || []).forEach((b) => {
@@ -412,7 +512,6 @@ export default function MachinePage() {
               }
               return null;
             })()}
-          </div>
         </DialogContent>
       </Dialog>
       <Dialog open={showConnectModal} onOpenChange={setShowConnectModal}>

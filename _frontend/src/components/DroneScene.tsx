@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type MutableRefObject } from "react";
-import * as THREE from "../../node_modules/@types/three";
+import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 const MOVE_SPEED = 1.3;
@@ -534,7 +534,7 @@ export default function DroneScene({
     let landingTiltX = 0;
     let landingTiltZ = 0;
     let eegStartHeldTime = 0;
-    const EEG_START_HOLD_SEC = 3;
+    const EEG_START_HOLD_SEC = 0.2;
     const keys: Record<string, boolean> = {};
 
     const onKeyDown = (e: KeyboardEvent) => {
@@ -586,13 +586,13 @@ export default function DroneScene({
       const propellersSpinning = motorsOn && !onGround;
 
       const eegStartRequest = eegCommandRef?.current?.start;
-      if (controlsRef.current === "eeg" && eegStartRequest) {
+      if (eegStartRequest) {
         eegStartHeldTime += dt;
       } else {
         eegStartHeldTime = 0;
       }
       const eegStartHeld = eegStartHeldTime >= EEG_START_HOLD_SEC;
-      const eegStart = controlsRef.current === "eeg" && onGround && !motorsOn && (keys["Space"] || keys["KeyF"] || (eegStartRequest && eegStartHeld));
+      const eegStart = onGround && !motorsOn && (keys["Space"] || keys["KeyF"] || (eegStartRequest && eegStartHeld));
       if (eegStart) {
         eegStartHeldTime = 0;
         motorsOn = true;
@@ -818,16 +818,20 @@ export default function DroneScene({
       if (!container) return;
       const w = container.clientWidth;
       const h = container.clientHeight;
+      if (w <= 0 || h <= 0) return;
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
     };
     onResize();
     window.addEventListener("resize", onResize);
+    const ro = new ResizeObserver(() => onResize());
+    ro.observe(container);
 
     animate();
 
     return () => {
+      ro.disconnect();
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("resize", onResize);
