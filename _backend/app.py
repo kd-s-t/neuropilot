@@ -74,22 +74,36 @@ def process_eeg_data():
         time.sleep(0.1)
 
 async def process_machine_controls():
-    """Process brainwave patterns and trigger machine controls via webhooks"""
+    """Process brainwave patterns and trigger machine controls via webhooks. If a detected event (action log) maps to a control, use that; else use bindings (trained control). Event can come from MNE (blink), sklearn model, or Gemini (prompt built from training sessions)."""
     import asyncio
-    from sqlalchemy.orm import Session
     from models import User
-    
+    from config.settings import settings
+
     while True:
         try:
-            # Get current band powers
+            from routers.websocket import broadcast_control_triggered
+            event_name = event_controller.get_and_clear_last_event()
             band_powers = eeg_controller.get_band_powers()
-            
-            if band_powers:
-                # Get database session
-                db = next(get_db())
-                try:
-                    users = db.query(User).filter(User.is_active == True).all()
-                    from routers.websocket import broadcast_control_triggered
+            db = next(get_db())
+            try:
+                if not event_name and band_powers:
+                    pred_label, _ = event_controller.predict_from_band_powers(band_powers)
+                    if pred_label:
+                        event_name = pred_label
+                    if not event_name and getattr(settings, "EVENT_USE_GEMINI", False) and (settings.GEMINI_API_KEY or "").strip():
+                        from controllers.gemini_event_classifier import predict_event_gemini
+                        pred_label, _ = predict_event_gemini(band_powers, db)
+                        if pred_label:
+                            event_name = pred_label
+                users = db.query(User).filter(User.is_active == True).all()
+                if event_name:
+                    for user in users:
+                        try:
+                            service = MachineControlService(db)
+                            await service.process_event_trigger(event_name, user.id, on_trigger=broadcast_control_triggered)
+                        except ValueError:
+                            pass
+                elif band_powers:
                     for user in users:
                         try:
                             service = MachineControlService(db)
@@ -100,9 +114,8 @@ async def process_machine_controls():
                             )
                         except ValueError:
                             pass
-                finally:
-                    db.close()
-            
+            finally:
+                db.close()
             await asyncio.sleep(0.1)
         except ValueError:
             await asyncio.sleep(1)

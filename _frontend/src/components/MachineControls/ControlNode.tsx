@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import { motion } from "framer-motion";
+import React, { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import * as ReactChartJS2 from "react-chartjs-2";
@@ -10,10 +10,36 @@ import { ChartNetwork, Unlink } from "lucide-react";
 
 const LineChartComponent = (ReactChartJS2 as any).Line as React.ComponentType<{ options: any; data: any }>;
 
-// Lightweight, loosely-typed props to avoid tight coupling with parent file
+const GRAPH_VISIBLE_KEY = "neuropilot-control-graph-visible";
+
+function getStoredGraphVisible(): boolean {
+  if (typeof window === "undefined") return true;
+  const raw = localStorage.getItem(GRAPH_VISIBLE_KEY);
+  if (raw === "false") return false;
+  if (raw === "true") return true;
+  return true;
+}
+
+function setStoredGraphVisible(value: boolean) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(GRAPH_VISIBLE_KEY, String(value));
+}
+
 export default function ControlNode({ data }: any) {
   const { control, binding, boundSession, onControlClick, selectedControl, onWebhookTrigger, webhookLoading, onUnbind, unbindLoading } = data;
   const [graphVisible, setGraphVisible] = useState(true);
+
+  useEffect(() => {
+    setGraphVisible(getStoredGraphVisible());
+  }, []);
+
+  const toggleGraph = () => {
+    setGraphVisible((v) => {
+      const next = !v;
+      setStoredGraphVisible(next);
+      return next;
+    });
+  };
 
   const buttonVariant = selectedControl === control.id ? "default" : "outline";
 
@@ -100,7 +126,7 @@ export default function ControlNode({ data }: any) {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setGraphVisible((v) => !v)}
+              onClick={toggleGraph}
               className="absolute top-0 right-0 h-[10px] w-[10px] p-0 flex items-center justify-center [&_svg]:!size-[10px]"
               title={graphVisible ? "Hide graph" : "Show graph"}
             >
@@ -108,20 +134,31 @@ export default function ControlNode({ data }: any) {
             </Button>
           )}
         </div>
-        {binding && boundSession && graphVisible && (
-          <div className="flex flex-col gap-0.5 w-[180px]">
-            <div className="h-[40px]">
-            <div className="h-full rounded border border-border bg-muted/50 p-1">
-              {bandPowers.length > 0 ? (
-                <LineChartComponent options={chartOptions as any} data={chartData as any} />
-              ) : (
-                <p className="flex h-full items-center justify-center text-[7px] text-muted-foreground">
-                  No data
-                </p>
-              )}
-            </div>
-            </div>
-          </div>
+        {binding && boundSession && (
+          <AnimatePresence initial={false}>
+            {graphVisible && (
+              <motion.div
+                key="graph"
+                className="flex flex-col gap-0.5 w-[180px] overflow-hidden"
+                initial={{ x: -180, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: 180, opacity: 0 }}
+                transition={{ type: "tween", duration: 0.2 }}
+              >
+                <div className="h-[40px]">
+                  <div className="h-full rounded border border-border bg-muted/50 p-1">
+                    {bandPowers.length > 0 ? (
+                      <LineChartComponent options={chartOptions as any} data={chartData as any} />
+                    ) : (
+                      <p className="flex h-full items-center justify-center text-[7px] text-muted-foreground">
+                        No data
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         )}
       </div>
       <div className="flex items-center gap-1 self-start">

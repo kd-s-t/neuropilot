@@ -26,6 +26,22 @@ _last_webhook_error_log: Dict[str, datetime] = {}
 SIMILARITY_APPROXIMATE = 0.60
 _SENTINEL_OLD = datetime(1970, 1, 1)
 
+EVENT_TO_CONTROL = {
+    "Look Right": "Turn Right",
+    "Blink": "Forward",
+    "Nod": "Up",
+}
+
+def _control_id_matches(control: dict, canonical: str) -> bool:
+    cid = (control.get("id") or "").strip()
+    if not cid:
+        return False
+    if cid == canonical:
+        return True
+    low = cid.lower().replace(" ", "_")
+    can_low = canonical.lower().replace(" ", "_")
+    return low == can_low or cid.lower() == canonical.lower()
+
 class MachineControlService:
     """Service to process brainwave patterns and trigger machine controls"""
 
@@ -97,6 +113,37 @@ class MachineControlService:
                             control_value,
                             on_trigger=on_trigger,
                         )
+
+    async def process_event_trigger(
+        self,
+        event_name: str,
+        user_id: int,
+        on_trigger=None,
+    ) -> None:
+        control_id = EVENT_TO_CONTROL.get(event_name) or event_name
+        if not control_id:
+            return
+        machines = self.machine_controller.get_user_machines(user_id, self.db)
+        for machine in machines:
+            control_positions = machine.control_positions or []
+            control_config = next(
+                (c for c in control_positions if _control_id_matches(c, control_id) and c.get("webhook_url")),
+                None
+            )
+            if not control_config:
+                continue
+            control_key = f"{machine.id}_{control_id}"
+            now = datetime.now()
+            if (now - self.last_command_time[control_key]).total_seconds() < self.min_command_interval:
+                continue
+            self.last_command_time[control_key] = now
+            await self._trigger_webhook(
+                machine.id,
+                control_config.get("webhook_url"),
+                control_id,
+                control_config.get("value"),
+                on_trigger=on_trigger,
+            )
     
     def _training_signature(self, session: TrainingSession) -> Optional[Dict[str, float]]:
         """Average band powers from session.data['bandPowers'] for this bound control."""

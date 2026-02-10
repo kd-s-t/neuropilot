@@ -302,6 +302,7 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
     try {
       await api.machines.deleteBinding(bindingId, token);
       await fetchBindings();
+      toast.success("Unbound");
     } catch (err) {
       const error = err as Error;
       setBindingError(error.message || String(err));

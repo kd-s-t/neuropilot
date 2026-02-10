@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     OPENAI_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
+    EVENT_USE_GEMINI: bool = False
 
     class Config:
         env_file = ".env"
