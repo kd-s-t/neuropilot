@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:fl_chart/fl_chart.dart';
+import '../eeg/muse2_ble.dart';
 
 class EegScreen extends StatefulWidget {
   const EegScreen({super.key});
@@ -13,10 +14,11 @@ class EegScreen extends StatefulWidget {
 class _EegScreenState extends State<EegScreen> {
   List<BluetoothDevice> _devices = [];
   BluetoothDevice? _connectedDevice;
+  Muse2Stream? _museStream;
   bool _scanning = false;
   String? _status;
   final List<double> _graphData = [];
-  static const int _maxPoints = 80;
+  static const int _maxPoints = 256;
   StreamSubscription<List<ScanResult>>? _scanSubscription;
 
   @override
@@ -25,9 +27,13 @@ class _EegScreenState extends State<EegScreen> {
     _startGraphSimulation();
   }
 
+  bool _isMuse(BluetoothDevice d) =>
+      d.platformName.isNotEmpty && d.platformName.toLowerCase().contains('muse');
+
   void _startGraphSimulation() {
     Future.doWhile(() async {
       if (!mounted) return false;
+      if (_museStream != null) return false;
       await Future.delayed(const Duration(milliseconds: 100));
       if (!mounted) return false;
       setState(() {
@@ -58,6 +64,7 @@ class _EegScreenState extends State<EegScreen> {
       for (final r in results) {
         if (seen.add(r.device.remoteId.str)) list.add(r.device);
       }
+      list.sort((a, b) => _isMuse(b) ? 1 : (_isMuse(a) ? -1 : 0));
       setState(() => _devices = list);
     });
     await FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
@@ -74,11 +81,37 @@ class _EegScreenState extends State<EegScreen> {
   Future<void> _connect(BluetoothDevice device) async {
     setState(() => _status = 'Connecting...');
     try {
-      await device.connect();
-      setState(() {
-        _connectedDevice = device;
-        _status = 'Connected: ${device.platformName.isNotEmpty ? device.platformName : device.remoteId}';
-      });
+      if (_isMuse(device)) {
+        final stream = Muse2Stream(
+          device: device,
+          onEegSamples: (channel, samples) {
+            if (!mounted || _museStream == null) return;
+            setState(() {
+              for (final s in samples) {
+                _graphData.add(s);
+                if (_graphData.length > _maxPoints) _graphData.removeAt(0);
+              }
+            });
+          },
+        );
+        final ok = await stream.connectAndStart();
+        if (!mounted) return;
+        if (ok) {
+          _museStream = stream;
+          setState(() {
+            _connectedDevice = device;
+            _status = 'Muse 2 streaming';
+          });
+        } else {
+          setState(() => _status = 'Muse service not found');
+        }
+      } else {
+        await device.connect();
+        setState(() {
+          _connectedDevice = device;
+          _status = 'Connected: ${device.platformName.isNotEmpty ? device.platformName : device.remoteId}';
+        });
+      }
     } catch (e) {
       setState(() => _status = 'Failed: $e');
     }
@@ -86,7 +119,12 @@ class _EegScreenState extends State<EegScreen> {
 
   Future<void> _disconnect() async {
     if (_connectedDevice == null) return;
-    await _connectedDevice!.disconnect();
+    if (_museStream != null) {
+      await _museStream!.stopAndDisconnect();
+      _museStream = null;
+    } else {
+      await _connectedDevice!.disconnect();
+    }
     setState(() {
       _connectedDevice = null;
       _status = null;
@@ -96,7 +134,11 @@ class _EegScreenState extends State<EegScreen> {
   @override
   void dispose() {
     _scanSubscription?.cancel();
-    _disconnect();
+    if (_museStream != null) {
+      unawaited(_museStream!.stopAndDisconnect());
+    } else if (_connectedDevice != null) {
+      unawaited(_connectedDevice!.disconnect());
+    }
     super.dispose();
   }
 
@@ -143,8 +185,8 @@ class _EegScreenState extends State<EegScreen> {
               LineChartData(
                 minX: 0,
                 maxX: _maxPoints.toDouble(),
-                minY: -1,
-                maxY: 1,
+                minY: -500,
+                maxY: 500,
                 lineBarsData: [
                   LineChartBarData(
                     spots: _graphData.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value)).toList(),

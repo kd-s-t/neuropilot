@@ -11,9 +11,11 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 import asyncio
+import threading
 import uvicorn
 from connection import DJIConnection
 from commands import DJICommands
+from position_cache import PositionCache
 from video_stream import (
     start_receiver as video_start_receiver,
     stop_receiver as video_stop_receiver,
@@ -48,8 +50,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global Tello connection
 tello_connection: Optional[DJIConnection] = None
+position_cache = PositionCache()
 
 class CommandRequest(BaseModel):
     control_id: str
@@ -98,13 +100,25 @@ async def execute_command(request: CommandRequest):
             response=None
         )
     
-    # Execute command on real device
     try:
         response = tello_connection.send_command(command)
-        print(f"✓ Executed: {control_id} -> {command} (response: {response})")
+        position_cache.update_after_command(command)
+        if position_cache.should_return_home():
+            def run_return_home():
+                for cmd in position_cache.return_home_commands():
+                    try:
+                        if tello_connection and tello_connection.connected:
+                            tello_connection.send_command(cmd)
+                            position_cache.update_after_command(cmd)
+                    except Exception:
+                        pass
+            threading.Thread(target=run_return_home, daemon=True).start()
+            print(f"✓ Executed: {control_id} -> {command} (response: {response}); return-to-home triggered")
+        else:
+            print(f"✓ Executed: {control_id} -> {command} (response: {response})")
         return CommandResponse(
             success=True,
-            message=f"Command executed successfully",
+            message="Command executed successfully",
             command=command,
             response=response
         )
@@ -125,6 +139,19 @@ async def execute_control(request: CommandRequest):
     Alias for /command endpoint
     """
     return await execute_command(request)
+
+@app.get("/position")
+async def get_position():
+    s = position_cache.state()
+    return {
+        "x": s["x"],
+        "y": s["y"],
+        "z": s["z"],
+        "yaw": s["yaw"],
+        "distance_from_home_cm": round(position_cache.distance_from_home(), 1),
+        "max_distance_cm": position_cache.max_distance_cm,
+    }
+
 
 @app.get("/health")
 async def health_check():
@@ -212,6 +239,7 @@ async def root():
         "endpoints": {
             "POST /command": "Execute Tello command",
             "POST /controls": "Execute Tello control",
+            "GET /position": "Cached position (x,y,z,yaw) and return-home limit",
             "GET /video": "MJPEG Tello camera stream",
             "POST /video/start": "Send streamon to Tello",
             "POST /video/stop": "Send streamoff to Tello",

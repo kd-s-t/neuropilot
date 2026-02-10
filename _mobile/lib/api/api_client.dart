@@ -122,6 +122,65 @@ class ApiClient {
       return null;
     }
   }
+
+  Future<MachineLogResponse> machinesTriggerWebhook(
+    int machineId,
+    String controlId,
+    String webhookUrl,
+    String? token, {
+    int? value,
+  }) async {
+    if (token == null || token.isEmpty) throw ApiException('Not authenticated');
+    final r = await http.post(
+      Uri.parse('$baseUrl/machines/$machineId/trigger-webhook'),
+      headers: _headers(token),
+      body: jsonEncode({
+        'control_id': controlId,
+        'webhook_url': webhookUrl,
+        if (value != null) 'value': value,
+      }),
+    );
+    return _handleRes(r, (d) => MachineLogResponse.fromJson(d as Map<String, dynamic>));
+  }
+}
+
+class MachineLogResponse {
+  MachineLogResponse({
+    required this.id,
+    required this.machineId,
+    required this.controlId,
+    required this.webhookUrl,
+    this.value,
+    required this.success,
+    this.statusCode,
+    this.errorMessage,
+    this.responseData,
+    required this.createdAt,
+  });
+  final int id;
+  final int machineId;
+  final String controlId;
+  final String webhookUrl;
+  final int? value;
+  final bool success;
+  final int? statusCode;
+  final String? errorMessage;
+  final String? responseData;
+  final String createdAt;
+  factory MachineLogResponse.fromJson(Map<String, dynamic> j) {
+    return MachineLogResponse(
+      id: j['id'] as int,
+      machineId: j['machine_id'] as int,
+      controlId: j['control_id'] as String,
+      webhookUrl: j['webhook_url'] as String,
+      value: j['value'] as int?,
+      success: j['success'] as bool? ?? false,
+      statusCode: j['status_code'] as int?,
+      errorMessage: j['error_message'] as String?,
+      responseData: j['response_data'] as String?,
+      createdAt: j['created_at'] as String,
+    );
+  }
 }
 
 class ApiException implements Exception {

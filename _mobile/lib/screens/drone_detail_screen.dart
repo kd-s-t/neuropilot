@@ -80,17 +80,82 @@ class _DroneDetailScreenState extends State<DroneDetailScreen> {
                         if (_machine!.controlPositions == null || _machine!.controlPositions!.isEmpty)
                           const Text('No controls')
                         else
-                          ..._machine!.controlPositions!.map((c) => Card(
-                                child: ListTile(
-                                  title: Text(c.id),
-                                  subtitle: c.description != null && c.description!.isNotEmpty
-                                      ? Text(c.description!)
-                                      : null,
-                                  trailing: Text('${c.x.toStringAsFixed(0)}, ${c.y.toStringAsFixed(0)}'),
-                                ),
+                          ..._machine!.controlPositions!.map((c) => _ControlCard(
+                                machineId: widget.machineId,
+                                control: c,
                               )),
                       ],
                     ),
+    );
+  }
+}
+
+class _ControlCard extends StatefulWidget {
+  const _ControlCard({required this.machineId, required this.control});
+
+  final int machineId;
+  final ControlPosition control;
+
+  @override
+  State<_ControlCard> createState() => _ControlCardState();
+}
+
+class _ControlCardState extends State<_ControlCard> {
+  bool _sending = false;
+
+  Future<void> _trigger() async {
+    final webhookUrl = widget.control.webhookUrl;
+    if (webhookUrl == null || webhookUrl.isEmpty) return;
+    final scope = NeuroPilotScope.of(context);
+    final token = scope.authStorage.token;
+    if (token == null || token.isEmpty) return;
+    setState(() => _sending = true);
+    try {
+      final log = await scope.api.machinesTriggerWebhook(
+        widget.machineId,
+        widget.control.id,
+        webhookUrl,
+        token,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(log.success ? 'Sent' : log.errorMessage ?? 'Failed'),
+          backgroundColor: log.success ? null : Theme.of(context).colorScheme.error,
+        ),
+      );
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message), backgroundColor: Theme.of(context).colorScheme.error),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString()), backgroundColor: Theme.of(context).colorScheme.error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.control;
+    final hasWebhook = c.webhookUrl != null && c.webhookUrl!.isNotEmpty;
+    return Card(
+      child: ListTile(
+        title: Text(c.id),
+        subtitle: c.description != null && c.description!.isNotEmpty ? Text(c.description!) : null,
+        trailing: hasWebhook
+            ? FilledButton(
+                onPressed: _sending ? null : _trigger,
+                child: _sending ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Send'),
+              )
+            : Text('${c.x.toStringAsFixed(0)}, ${c.y.toStringAsFixed(0)}'),
+      ),
     );
   }
 }

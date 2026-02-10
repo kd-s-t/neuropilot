@@ -42,4 +42,7 @@ else
 fi
 
 cd "$(dirname "$0")"
+if [ "$PLATFORM" = "Darwin" ] && [ -n "$CONDA_BASE" ] && [ -f "$CONDA_BASE/bin/python" ]; then
+    exec "$CONDA_BASE/bin/python" -m uvicorn app:app --reload --host 0.0.0.0 --port 8000
+fi
 python3 -m uvicorn app:app --reload --host 0.0.0.0 --port 8000

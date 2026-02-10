@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type MutableRefObject } from "react";
-import * as THREE from "three";
+import * as THREE from "../../node_modules/@types/three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 const MOVE_SPEED = 1.3;
