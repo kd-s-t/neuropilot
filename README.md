@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./_frontned/public/readmelogo.png" alt="NeuroPilot" width="40%" />
+  <img src="./_frontend/public/readmelogo.png" alt="NeuroPilot" width="40%" />
 </div>
 
 # Neuro<span style="color: #3B82F6;">Pilot</span> - EEG Brainwave Control System
