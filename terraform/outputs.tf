@@ -5,7 +5,7 @@ output "instance_id" {
 
 output "public_ip" {
   value       = vultr_instance.app.main_ip
-  description = "Public IP for FE/BE (e.g. http://this-ip or https://this-ip.sslip.io)"
+  description = "Public IP (reserved); use for DNS (e.g. app.theneuropilot.com)"
 }
 
 output "ssh_user" {
