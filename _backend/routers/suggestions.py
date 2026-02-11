@@ -87,7 +87,7 @@ def _call_openai(counts: Dict[str, int]) -> Optional[SuggestionsResponse]:
         return None
 
 
-GEMINI_MODEL = {"gemini_flash": "gemini-1.5-flash", "gemini_pro": "gemini-1.5-pro"}
+GEMINI_MODEL = {"gemini_flash": "gemini-2.5-flash", "gemini_pro": "gemini-1.5-pro"}
 
 
 def _call_gemini(counts: Dict[str, int], provider: Literal["gemini_flash", "gemini_pro"]) -> Optional[SuggestionsResponse]:

@@ -166,6 +166,7 @@ export default function Lab() {
   const [trainAISelectedIds, setTrainAISelectedIds] = useState<number[]>([]);
   const [trainAILoading, setTrainAILoading] = useState(false);
   const [trainAIResult, setTrainAIResult] = useState<{ conclusion_text: string | null } | null>(null);
+  const [trainAIProvider, setTrainAIProvider] = useState<"openai" | "gemini">("gemini");
   useEffect(() => {
     setSavedSuggestion(localStorage.getItem(SUGGESTION_STORAGE_KEY));
   }, []);
@@ -809,6 +810,17 @@ export default function Lab() {
             </div>
           ) : (
             <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Model</Label>
+                <select
+                  value={trainAIProvider}
+                  onChange={(e) => setTrainAIProvider(e.target.value as "openai" | "gemini")}
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                >
+                  <option value="gemini">Gemini</option>
+                  <option value="openai">OpenAI</option>
+                </select>
+              </div>
               <div className="flex gap-2">
                 <Button
                   variant="outline"
@@ -859,7 +871,7 @@ export default function Lab() {
                     if (!token) return;
                     setTrainAILoading(true);
                     try {
-                      const res = await api.ai.trainAi(trainAISelectedIds, token);
+                      const res = await api.ai.trainAi(trainAISelectedIds, token, trainAIProvider);
                       setTrainAIResult({ conclusion_text: res.conclusion_text });
                     } catch (_) {
                       setTrainAIResult({ conclusion_text: "Request failed." });

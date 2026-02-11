@@ -16,6 +16,7 @@ _SAVED_DIR = os.path.join(os.path.dirname(__file__), "..", "saved_models")
 _EVENT_MODEL_PATH = os.path.join(_SAVED_DIR, "event_model.pkl")
 _EVENT_LABELS_PATH = os.path.join(_SAVED_DIR, "event_model_labels.json")
 _MIN_CONFIDENCE = 0.5
+_TRAINING_RUN_MIN_SIMILARITY = 0.85
 
 class EventController:
     def __init__(self):
@@ -42,15 +43,69 @@ class EventController:
         except Exception:
             return False
 
-    def predict_from_band_powers(self, band_powers: Dict[str, Any]) -> Tuple[Optional[str], float]:
-        if not band_powers or not self._load_event_model():
-            return None, 0.0
+    def _vec_from_band_powers(self, band_powers: Dict[str, Any]) -> Optional[List[float]]:
         vec = []
         for b in BANDS:
             v = band_powers.get(b)
             p = float((v.get("power", 0) or 0)) if isinstance(v, dict) else 0.0
             vec.append(p)
-        if len(vec) != 5:
+        return vec if len(vec) == 5 else None
+
+    def _predict_from_training_run(self, vec: List[float], user_id: int, db) -> Tuple[Optional[str], float]:
+        try:
+            from models import AITrainingRun
+            run = (
+                db.query(AITrainingRun)
+                .filter(AITrainingRun.user_id == user_id)
+                .order_by(AITrainingRun.created_at.desc())
+                .limit(1)
+                .first()
+            )
+            if not run or not run.conclusion_data:
+                return None, 0.0
+            summaries = run.conclusion_data.get("summaries") or []
+            if not summaries:
+                return None, 0.0
+            scale = max(vec) or 1.0
+            norm_vec = np.array([x / scale for x in vec], dtype=np.float64)
+            n_norm = np.linalg.norm(norm_vec)
+            if n_norm <= 0:
+                return None, 0.0
+            norm_vec = norm_vec / n_norm
+            best_name: Optional[str] = None
+            best_sim = -1.0
+            for s in summaries:
+                mean = s.get("mean")
+                if not mean or len(mean) != 5:
+                    continue
+                ref = np.array(mean, dtype=np.float64)
+                ref_norm = np.linalg.norm(ref)
+                if ref_norm <= 0:
+                    continue
+                ref = ref / ref_norm
+                sim = float(np.dot(norm_vec, ref))
+                if sim > best_sim:
+                    best_sim = sim
+                    best_name = (s.get("name") or "").strip() or f"session_{s.get('id', '')}"
+            if best_name is None or best_sim < _TRAINING_RUN_MIN_SIMILARITY:
+                return None, 0.0
+            return best_name, best_sim
+        except Exception:
+            return None, 0.0
+
+    def predict_from_band_powers(
+        self, band_powers: Dict[str, Any], user_id: Optional[int] = None, db=None
+    ) -> Tuple[Optional[str], float]:
+        if not band_powers:
+            return None, 0.0
+        vec = self._vec_from_band_powers(band_powers)
+        if not vec:
+            return None, 0.0
+        if user_id is not None and db is not None:
+            label, conf = self._predict_from_training_run(vec, user_id, db)
+            if label and conf >= _MIN_CONFIDENCE:
+                return label, conf
+        if not self._load_event_model():
             return None, 0.0
         try:
             proba = self._event_model.predict_proba([vec])[0]

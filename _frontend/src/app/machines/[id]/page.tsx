@@ -56,7 +56,7 @@ export default function MachinePage() {
   const [logsLoading, setLogsLoading] = useState(false);
   const [bindings, setBindings] = useState<string[]>([]);
   const [connectBattery, setConnectBattery] = useState<number | null>(null);
-  const [lastTriggeredControl, setLastTriggeredControl] = useState<string | null>(null);
+  const [triggeredCounts, setTriggeredCounts] = useState<Record<string, number>>({});
 
   const SIMULATOR_EEG_INITIAL = {
     Delta: { power: [] as number[], range: [0.5, 4] as [number, number] },
@@ -99,7 +99,8 @@ export default function MachinePage() {
   useEffect(() => {
     if (!showSimulator || machineId == null) return;
     const ws = api.ws.createControlTriggers(machineId);
-    const controlIdToKey: Record<string, keyof EegCommand> = {
+    type EegCommandKey = Exclude<keyof EegCommand, "startTriggeredAt">;
+    const controlIdToKey: Record<string, EegCommandKey> = {
       Start: "start",
       Forward: "forward",
       Reverse: "back",
@@ -110,17 +111,29 @@ export default function MachinePage() {
       "Turn Left": "turnLeft",
       "Turn Right": "turnRight",
     };
+    const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, " ");
+    const byNormalized: Record<string, EegCommandKey> = {};
+    Object.entries(controlIdToKey).forEach(([k, v]) => { byNormalized[normalize(k)] = v; });
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data as string) as { control_id?: string };
         const controlId = data.control_id;
-        if (controlId != null) setLastTriggeredControl(controlId);
-        const key = controlId != null ? controlIdToKey[controlId] : undefined;
+        if (controlId != null) setTriggeredCounts((prev) => ({ ...prev, [controlId]: (prev[controlId] ?? 0) + 1 }));
+        const key = controlId != null
+          ? (controlIdToKey[controlId] ?? byNormalized[normalize(controlId)])
+          : undefined;
         if (key && simulatorEegCommandRef.current) {
           simulatorEegCommandRef.current[key] = true;
+          if (key === "start") {
+            simulatorEegCommandRef.current.startTriggeredAt = Date.now();
+          }
           const durationMs = key === "start" ? 4000 : 200;
+          const keyCopy = key;
           window.setTimeout(() => {
-            if (simulatorEegCommandRef.current) simulatorEegCommandRef.current[key] = false;
+            if (simulatorEegCommandRef.current) {
+              simulatorEegCommandRef.current[keyCopy] = false;
+              if (keyCopy === "start") simulatorEegCommandRef.current.startTriggeredAt = undefined;
+            }
           }, durationMs);
         }
       } catch (_) {}
@@ -464,7 +477,12 @@ export default function MachinePage() {
               <EEGChart eegData={simulatorEegData} className="w-full h-full" />
             </div>
             <p className="text-sm text-muted-foreground mt-1">
-              {lastTriggeredControl != null ? `Last triggered: ${lastTriggeredControl}` : "Last triggered: —"}
+              {Object.keys(triggeredCounts).length === 0
+                ? "Triggered: —"
+                : `Triggered: ${Object.entries(triggeredCounts)
+                    .filter(([, n]) => n > 0)
+                    .map(([name, n]) => `${name} (${n})`)
+                    .join(", ")}`}
             </p>
             {/* If required controls missing, show a small red log below.
                 Consider both saved control_positions and machine bindings, normalize ids and map synonyms. */}

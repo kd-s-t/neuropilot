@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Literal
 import httpx
 
 from config import get_db
@@ -12,12 +12,13 @@ from models import User, TrainingSession, AITrainingRun
 router = APIRouter(prefix="/ai", tags=["ai"])
 
 BANDS = ["Delta", "Theta", "Alpha", "Beta", "Gamma"]
-GEMINI_MODEL = "gemini-1.5-flash"
+GEMINI_MODEL = "gemini-2.5-flash"
 MAX_POINTS_PER_SESSION = 50
 
 
 class TrainAIRequest(BaseModel):
     session_ids: List[int]
+    provider: Literal["openai", "gemini"] | None = None
 
 
 class TrainAIResponse(BaseModel):
@@ -51,20 +52,23 @@ def _session_summary(session: TrainingSession) -> dict:
     step = max(1, len(vectors) // MAX_POINTS_PER_SESSION)
     sampled = [vectors[i] for i in range(0, len(vectors), step)][:MAX_POINTS_PER_SESSION]
     means = [sum(v[i] for v in sampled) / len(sampled) for i in range(5)]
+    scale = max(means) or 1.0
+    scaled_mean = [round(x / scale, 4) for x in means]
+    scaled_sample = [[round(x / scale, 4) for x in row] for row in sampled[:10]]
     return {
         "id": session.id,
         "name": session.name or f"Session {session.id}",
         "points": len(sampled),
-        "mean": [round(x, 2) for x in means],
-        "sample": [[round(x, 2) for x in row] for row in sampled[:10]],
+        "mean": scaled_mean,
+        "sample": scaled_sample,
     }
 
 
 def _build_prompt(summaries: List[dict]) -> str:
     lines = [
-        "The user has EEG training sessions. Each session has band-power time series (Delta, Theta, Alpha, Beta, Gamma).",
-        "Look at the session summaries below and identify patterns: e.g. recurring band-power profiles, distinct mental states, or segments that repeat.",
-        "Reply with a short conclusion (2–5 sentences): what patterns you see and how they might correspond to repeated actions (e.g. turn right, turn left, blink).",
+        "The user has EEG training sessions. Each session has band-power time series (Delta, Theta, Alpha, Beta, Gamma), normalized to 0-1 scale.",
+        "Look at the session summaries below and identify patterns: e.g. recurring band-power profiles, distinct mental states, or how they might correspond to repeated actions (e.g. turn right, turn left, blink).",
+        "Reply with a short conclusion in at most 5 sentences: what patterns you see. Do not exceed 5 sentences.",
         "",
     ]
     for s in summaries:
@@ -74,10 +78,46 @@ def _build_prompt(summaries: List[dict]) -> str:
     return "\n".join(lines)
 
 
-def _call_gemini(prompt: str) -> str | None:
+def _call_openai(prompt: str) -> str:
+    key = (settings.OPENAI_API_KEY or "").strip()
+    if not key:
+        return "OPENAI_API_KEY is not set."
+    url = "https://api.openai.com/v1/chat/completions"
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            r = client.post(
+                url,
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json={
+                    "model": "gpt-4o-mini",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 2048,
+                },
+            )
+            if not r.is_success:
+                try:
+                    body = r.json()
+                    msg = body.get("error", {}).get("message", r.text[:200])
+                except Exception:
+                    msg = r.text[:200] if r.text else str(r.status_code)
+                err_msg = f"OpenAI API error ({r.status_code}): {msg}"
+                print(err_msg)
+                return err_msg
+            data = r.json()
+            text = (data.get("choices") or [{}])[0].get("message", {}).get("content", "").strip()
+            if not text:
+                return "OpenAI returned empty text."
+            return text
+    except httpx.TimeoutException:
+        return "OpenAI request timed out."
+    except Exception as e:
+        return f"OpenAI request failed: {e!s}"
+
+
+def _call_gemini(prompt: str) -> str:
     key = (settings.GEMINI_API_KEY or "").strip()
     if not key:
-        return None
+        return "GEMINI_API_KEY is not set."
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
     try:
         with httpx.Client(timeout=30.0) as client:
@@ -86,17 +126,36 @@ def _call_gemini(prompt: str) -> str | None:
                 headers={"x-goog-api-key": key, "Content-Type": "application/json"},
                 json={
                     "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {"maxOutputTokens": 500},
+                    "generationConfig": {"maxOutputTokens": 2048},
                 },
             )
             if not r.is_success:
-                return None
+                try:
+                    body = r.json()
+                    msg = body.get("error", {}).get("message", r.text[:200])
+                except Exception:
+                    msg = r.text[:200] if r.text else str(r.status_code)
+                err_msg = f"Gemini API error ({r.status_code}): {msg}"
+                print(err_msg)
+                return err_msg
             data = r.json()
-            cands = data.get("candidates") or [{}]
-            parts = (cands[0].get("content") or {}).get("parts") or [{}]
-            return (parts[0].get("text") or "").strip()
-    except Exception:
-        return None
+            cands = data.get("candidates")
+            if not cands:
+                feedback = (data.get("promptFeedback") or {})
+                block = feedback.get("blockReason", "")
+                err_msg = f"Gemini returned no reply. Block reason: {block or 'unknown'} (e.g. safety filter)."
+                print(err_msg)
+                return err_msg
+            parts = (cands[0].get("content") or {}).get("parts") or []
+            text = (parts[0].get("text") or "").strip() if parts else ""
+            if not text:
+                print("Gemini returned empty text.")
+                return "Gemini returned empty text."
+            return text
+    except httpx.TimeoutException:
+        return "Gemini request timed out."
+    except Exception as e:
+        return f"Gemini request failed: {e!s}"
 
 
 @router.post("/train", response_model=TrainAIResponse)
@@ -119,7 +178,11 @@ def train_ai(
         raise HTTPException(status_code=404, detail="One or more sessions not found")
     summaries = [_session_summary(s) for s in sessions]
     prompt = _build_prompt(summaries)
-    conclusion_text = _call_gemini(prompt)
+    provider = (body.provider or settings.AI_TRAIN_PROVIDER or "gemini").strip().lower()
+    if provider == "openai":
+        conclusion_text = _call_openai(prompt)
+    else:
+        conclusion_text = _call_gemini(prompt)
     conclusion_data = {"session_ids": body.session_ids, "summaries": summaries}
     run = AITrainingRun(
         user_id=current_user.id,

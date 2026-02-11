@@ -230,11 +230,11 @@ export const api = {
   },
 
   ai: {
-    async trainAi(sessionIds: number[], token?: string | null): Promise<{ id: number; conclusion_text: string | null; conclusion_data: Record<string, unknown> | null }> {
+    async trainAi(sessionIds: number[], token?: string | null, provider?: "openai" | "gemini"): Promise<{ id: number; conclusion_text: string | null; conclusion_data: Record<string, unknown> | null }> {
       const res = await fetch(`${API_BASE}/ai/train`, {
         method: "POST",
         headers: headers(token),
-        body: JSON.stringify({ session_ids: sessionIds }),
+        body: JSON.stringify({ session_ids: sessionIds, ...(provider ? { provider } : {}) }),
       });
       return handleRes(res);
     },

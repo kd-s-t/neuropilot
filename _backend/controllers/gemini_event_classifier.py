@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional, Tuple, List
 from config.settings import settings
 
 BANDS = ["Delta", "Theta", "Alpha", "Beta", "Gamma"]
-GEMINI_MODEL = "gemini-1.5-flash"
+GEMINI_MODEL = "gemini-2.5-flash"
 _CONTEXT_CACHE: Optional[Dict[str, List[float]]] = None
 _CONTEXT_CACHE_TIME: float = 0
 _CONTEXT_CACHE_TTL = 60.0

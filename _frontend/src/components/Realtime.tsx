@@ -26,10 +26,11 @@ interface RealtimeProps {
   hideControls?: boolean;
   externalListening?: boolean;
   onListeningChange?: (listening: boolean) => void;
+  showRecordingBadge?: boolean;
 }
 
 export default function EEGDeviceCalibration(props: RealtimeProps = {}) {
-  const { hideControls = false, externalListening, onListeningChange } = props;
+  const { hideControls = false, externalListening, onListeningChange, showRecordingBadge = true } = props;
   const [eegData, setEegData] = useState(INITIAL_EEG);
   const [internalListening, setInternalListening] = useState(false);
   const [backendStatus, setBackendStatus] = useState<{ connected: boolean; message: string; has_data: boolean } | null>(null);
@@ -180,7 +181,7 @@ export default function EEGDeviceCalibration(props: RealtimeProps = {}) {
             )}
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            {isListening && (
+            {showRecordingBadge && isListening && (
               <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-1.5">
                 <div className="h-2 w-2 animate-pulse rounded-full bg-green-500" />
                 <span className="text-sm font-medium">Recording</span>

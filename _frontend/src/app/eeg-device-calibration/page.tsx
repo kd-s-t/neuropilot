@@ -21,7 +21,7 @@ export default function EEGDeviceCalibrationRoutePage() {
 
   return (
     <div className="container mx-auto p-4">
-      <EEGDeviceCalibration />
+      <EEGDeviceCalibration showRecordingBadge={false} />
     </div>
   );
 }

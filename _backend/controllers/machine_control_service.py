@@ -25,6 +25,8 @@ WEBHOOK_ERROR_LOG_INTERVAL = 60.0
 _last_webhook_error_log: Dict[str, datetime] = {}
 SIMILARITY_APPROXIMATE = 0.60
 _SENTINEL_OLD = datetime(1970, 1, 1)
+_global_last_trigger: Dict[str, datetime] = {}
+_MIN_TRIGGER_INTERVAL = 3.0
 
 EVENT_TO_CONTROL = {
     "Look Right": "Turn Right",
@@ -42,6 +44,24 @@ def _control_id_matches(control: dict, canonical: str) -> bool:
     can_low = canonical.lower().replace(" ", "_")
     return low == can_low or cid.lower() == canonical.lower()
 
+
+def _session_name_normalize(name: str) -> str:
+    return (name or "").strip().lower().replace(" ", "_").replace("_loop", "")
+
+
+def _event_name_to_session_name_candidates(event_name: str) -> list:
+    s = (event_name or "").strip()
+    if not s:
+        return []
+    out = [s]
+    no_loop = s.replace(" loop", "").strip()
+    if no_loop and no_loop != s:
+        out.append(no_loop)
+    first = s.split()[0] if s.split() else s
+    if first and first not in out:
+        out.append(first)
+    return out
+
 class MachineControlService:
     """Service to process brainwave patterns and trigger machine controls"""
 
@@ -49,7 +69,7 @@ class MachineControlService:
         self.db = db
         self.machine_controller = MachineController()
         self.last_command_time: Dict[str, datetime] = defaultdict(lambda: _SENTINEL_OLD)
-        self.min_command_interval = 0.5
+        self.min_command_interval = _MIN_TRIGGER_INTERVAL
         _mode = os.environ.get("MATCH_MODE", "strict").lower()
         self._match_mode = "ordinal" if _mode == "ordinal" else ("approximate" if _mode == "approximate" else "strict")
         self._similarity_threshold = (
@@ -99,13 +119,11 @@ class MachineControlService:
                 
                 # Check if pattern matches this binding's training session
                 if self._pattern_matches(band_powers, binding.training_session_id, user_id):
-                    # Check rate limiting
                     control_key = f"{machine.id}_{binding.control_id}"
                     now = datetime.now()
-                    time_since_last = (now - self.last_command_time[control_key]).total_seconds()
-                    
-                    if time_since_last >= self.min_command_interval:
-                        self.last_command_time[control_key] = now
+                    last = _global_last_trigger.get(control_key, _SENTINEL_OLD)
+                    if (now - last).total_seconds() >= self.min_command_interval:
+                        _global_last_trigger[control_key] = now
                         await self._trigger_webhook(
                             machine.id,
                             webhook_url,
@@ -114,36 +132,54 @@ class MachineControlService:
                             on_trigger=on_trigger,
                         )
 
+    def _training_session_ids_by_name(self, user_id: int, event_name: str) -> List[int]:
+        candidates = _event_name_to_session_name_candidates(EVENT_TO_CONTROL.get(event_name) or event_name)
+        if not candidates:
+            return []
+        norm_candidates = {_session_name_normalize(c) for c in candidates}
+        sessions = self.db.query(TrainingSession).filter(
+            TrainingSession.user_id == user_id,
+            TrainingSession.name.isnot(None),
+        ).all()
+        return [
+            s.id for s in sessions
+            if _session_name_normalize(s.name or "") in norm_candidates
+        ]
+
     async def process_event_trigger(
         self,
         event_name: str,
         user_id: int,
         on_trigger=None,
     ) -> None:
-        control_id = EVENT_TO_CONTROL.get(event_name) or event_name
-        if not control_id:
+        session_ids = self._training_session_ids_by_name(user_id, event_name)
+        if not session_ids:
             return
         machines = self.machine_controller.get_user_machines(user_id, self.db)
         for machine in machines:
+            bindings = self.machine_controller.get_machine_bindings(machine.id, user_id, self.db)
             control_positions = machine.control_positions or []
-            control_config = next(
-                (c for c in control_positions if _control_id_matches(c, control_id) and c.get("webhook_url")),
-                None
-            )
-            if not control_config:
-                continue
-            control_key = f"{machine.id}_{control_id}"
-            now = datetime.now()
-            if (now - self.last_command_time[control_key]).total_seconds() < self.min_command_interval:
-                continue
-            self.last_command_time[control_key] = now
-            await self._trigger_webhook(
-                machine.id,
-                control_config.get("webhook_url"),
-                control_id,
-                control_config.get("value"),
-                on_trigger=on_trigger,
-            )
+            control_configs = {c.get("id"): c for c in control_positions if c.get("id") and c.get("webhook_url")}
+            for binding in bindings:
+                if binding.training_session_id not in session_ids:
+                    continue
+                control_config = control_configs.get(binding.control_id)
+                if not control_config:
+                    continue
+                resolved_id = control_config.get("id") or binding.control_id
+                control_key = f"{machine.id}_{resolved_id}"
+                now = datetime.now()
+                last = _global_last_trigger.get(control_key, _SENTINEL_OLD)
+                if (now - last).total_seconds() < self.min_command_interval:
+                    continue
+                _global_last_trigger[control_key] = now
+                await self._trigger_webhook(
+                    machine.id,
+                    control_config.get("webhook_url"),
+                    resolved_id,
+                    control_config.get("value"),
+                    on_trigger=on_trigger,
+                )
     
     def _training_signature(self, session: TrainingSession) -> Optional[Dict[str, float]]:
         """Average band powers from session.data['bandPowers'] for this bound control."""

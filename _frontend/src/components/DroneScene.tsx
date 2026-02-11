@@ -372,6 +372,7 @@ export type EegCommand = {
   back: boolean;
   turnLeft: boolean;
   turnRight: boolean;
+  startTriggeredAt?: number;
 };
 
 export type DroneSceneProps = {
@@ -585,14 +586,17 @@ export default function DroneScene({
         drone.position.y < liftTargetY - 0.005;
       const propellersSpinning = motorsOn && !onGround;
 
-      const eegStartRequest = eegCommandRef?.current?.start;
+      const cmd = eegCommandRef?.current;
+      const eegStartRequest = !!cmd?.start;
+      const startPulseMs = cmd?.startTriggeredAt ? Date.now() - cmd.startTriggeredAt : Infinity;
+      const eegStartPulse = startPulseMs < 1000;
       if (eegStartRequest) {
         eegStartHeldTime += dt;
       } else {
         eegStartHeldTime = 0;
       }
       const eegStartHeld = eegStartHeldTime >= EEG_START_HOLD_SEC;
-      const eegStart = onGround && !motorsOn && (keys["Space"] || keys["KeyF"] || (eegStartRequest && eegStartHeld));
+      const eegStart = onGround && !motorsOn && (keys["Space"] || keys["KeyF"] || eegStartRequest || eegStartPulse || (eegStartRequest && eegStartHeld));
       if (eegStart) {
         eegStartHeldTime = 0;
         motorsOn = true;
