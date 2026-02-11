@@ -159,6 +159,17 @@ Server runs at `http://localhost:8888/command` and forwards commands to the Tell
 - **Session Management**: Track and analyze training sessions with detailed metrics
 - **Real-time Visualization**: Live charts showing brainwave band powers and position trails
 
+### Vultr Infrastructure
+
+| Resource | Terraform | Description |
+|----------|-----------|-------------|
+| **Compute** | `compute.tf` | `vultr_instance.app` — VM with Docker (cloud-init) |
+| **Database** | `database.tf` | `vultr_database.pg` — Managed PostgreSQL 16 |
+| **Container registry (VCR)** | `registry.tf` | `vultr_container_registry.vcr` — Image registry |
+| **Firewall** | `firewall.tf` | `vultr_firewall_group.app` — Rules: 22, 80, 443, 3000, 8000 |
+| **VPC** | `vpc.tf` | `vultr_vpc.app` — Private network, attached via `vpc_ids` |
+| **Reserved IP** | `reserved_ip.tf` | `vultr_reserved_ip.app` — Static IP, attached via `reserved_ip_id` |
+
 ---
 
 ## License
