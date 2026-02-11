@@ -69,7 +69,7 @@ https://lablab.ai/ai-hackathons/launch-fund-ai-meets-robotics
 - **Frontend**: Next.js 15 with NextAuth - Modern React application with JWT authentication, real-time visualization, and machine control interface
 - **Database**: PostgreSQL - Stores user sessions, training data, EEG recordings, machines, and control bindings
 
-**Main IP:** 45.32.121.168 — App: http://45.32.121.168:3000 | API: http://45.32.121.168:8000
+**Live:** [App](https://app.theneuropilot.com) | [API](https://api.theneuropilot.com) — HTTPS via Caddy (Let's Encrypt). SSH: `root@45.32.121.168` (or reserved IP from `terraform output public_ip`).
 
 ### CI (GitHub Actions)
 
