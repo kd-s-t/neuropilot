@@ -32,8 +32,8 @@ jobs:
       - name: Build frontend
         uses: docker/build-push-action@v6
         with:
-          context: ./_frontned
-          file: ./_frontned/Dockerfile
+          context: ./_frontend
+          file: ./_frontend/Dockerfile
           push: false
           tags: frontend:${{ github.sha }}
           build-args: |
@@ -73,8 +73,8 @@ jobs:
       - name: Build and push frontend
         uses: docker/build-push-action@v6
         with:
-          context: ./_frontned
-          file: ./_frontned/Dockerfile
+          context: ./_frontend
+          file: ./_frontend/Dockerfile
           push: true
           build-args: |
             NEXT_PUBLIC_BACKEND_URL=${{ secrets.NEXT_PUBLIC_BACKEND_URL }}
