@@ -1,21 +1,41 @@
 services:
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      APP_HOST: app.${SERVER_HOST}
+      API_HOST: api.${SERVER_HOST}
+    volumes:
+      - ./Caddyfile.template:/etc/caddy/Caddyfile.template:ro
+      - caddy_data:/data
+    command: ["sh", "-c", "sed -e \"s/__APP_HOST__/$$APP_HOST/g\" -e \"s/__API_HOST__/$$API_HOST/g\" /etc/caddy/Caddyfile.template > /tmp/Caddyfile && exec caddy run --config /tmp/Caddyfile --adapter caddyfile"]
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
+
   backend:
     image: ${REGISTRY_HOST}/${REGISTRY_NAME}/backend:latest
     env_file: .env
     environment:
       DATABASE_URL: ${DATABASE_URL}
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
 
   frontend:
     image: ${REGISTRY_HOST}/${REGISTRY_NAME}/frontend:latest
     env_file: .env
     environment:
       BACKEND_URL: http://backend:8000
-      NEXTAUTH_URL: ${NEXTAUTH_URL}
+      NEXTAUTH_URL: https://app.${SERVER_HOST}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
-      NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL}
+      NEXT_PUBLIC_BACKEND_URL: https://api.${SERVER_HOST}
     depends_on:
       - backend
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
+
+volumes:
+  caddy_data:

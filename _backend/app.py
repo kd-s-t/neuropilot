@@ -6,7 +6,7 @@ import threading
 import numpy as np
 import os
 from config import init_db, get_db
-from routers import auth_router, eeg_router, websocket_router, training_router, machine_router, suggestions_router
+from routers import auth_router, eeg_router, websocket_router, training_router, machine_router, suggestions_router, ai_router
 from routers.websocket import clients, has_control_trigger_subscribers
 from routers.health import router as health_router
 from controllers import EEGController, EventController
@@ -40,6 +40,7 @@ app.include_router(websocket_router)
 app.include_router(training_router)
 app.include_router(machine_router)
 app.include_router(suggestions_router)
+app.include_router(ai_router)
 
 # Mount static files for blueprints
 blueprints_dir = "blueprints"

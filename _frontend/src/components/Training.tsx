@@ -162,6 +162,10 @@ export default function Lab() {
   const [openaiSuggestion, setOpenaiSuggestion] = useState<{ use_fallback: boolean; sentence?: string; top?: string[]; rare?: string[]; provider?: "openai" | "gemini_flash" | "gemini_pro"; error?: string } | null>(null);
   const [savedSuggestion, setSavedSuggestion] = useState<string | null>(null);
   const [pinnedSuggestion, setPinnedSuggestion] = useState<string | null>(null);
+  const [showTrainAIModal, setShowTrainAIModal] = useState(false);
+  const [trainAISelectedIds, setTrainAISelectedIds] = useState<number[]>([]);
+  const [trainAILoading, setTrainAILoading] = useState(false);
+  const [trainAIResult, setTrainAIResult] = useState<{ conclusion_text: string | null } | null>(null);
   useEffect(() => {
     setSavedSuggestion(localStorage.getItem(SUGGESTION_STORAGE_KEY));
   }, []);
@@ -688,6 +692,15 @@ export default function Lab() {
               {history.length > 0 && (
                 <span className="text-sm text-muted-foreground">{history.length} sessions</span>
               )}
+              {token && history.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowTrainAIModal(true)}
+                >
+                  Train AI
+                </Button>
+              )}
               {token && (
                 <Button
                   variant="outline"
@@ -771,6 +784,97 @@ export default function Lab() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog
+        open={showTrainAIModal}
+        onOpenChange={(open) => {
+          setShowTrainAIModal(open);
+          if (!open) {
+            setTrainAIResult(null);
+            setTrainAISelectedIds([]);
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Train AI</DialogTitle>
+            <DialogDescription>
+              Select training sessions to include in the learn process. AI will look for patterns in the selected sessions.
+            </DialogDescription>
+          </DialogHeader>
+          {trainAIResult ? (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{trainAIResult.conclusion_text || "No conclusion returned."}</p>
+              <Button onClick={() => { setTrainAIResult(null); setTrainAISelectedIds([]); setShowTrainAIModal(false); }}>Close</Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setTrainAISelectedIds(history.map((s) => s.id))}
+                >
+                  Select all
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setTrainAISelectedIds([])}>
+                  Clear
+                </Button>
+              </div>
+              <div className="max-h-[40vh] overflow-y-auto space-y-2">
+                {history.map((s) => (
+                  <label
+                    key={s.id}
+                    className="flex items-center gap-3 rounded-lg border px-3 py-2 cursor-pointer hover:bg-muted/50"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={trainAISelectedIds.includes(s.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setTrainAISelectedIds((prev) => [...prev, s.id]);
+                        } else {
+                          setTrainAISelectedIds((prev) => prev.filter((id) => id !== s.id));
+                        }
+                      }}
+                      className="h-4 w-4"
+                    />
+                    <span className="font-medium">{s.name?.trim() || "(no name)"}</span>
+                    <span className="text-sm text-muted-foreground">#{s.id}</span>
+                    {s.duration_seconds != null && (
+                      <span className="text-sm text-muted-foreground">
+                        {Math.floor(s.duration_seconds / 60)}m {s.duration_seconds % 60}s
+                      </span>
+                    )}
+                  </label>
+                ))}
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setShowTrainAIModal(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  disabled={trainAISelectedIds.length === 0 || trainAILoading}
+                  onClick={async () => {
+                    if (!token) return;
+                    setTrainAILoading(true);
+                    try {
+                      const res = await api.ai.trainAi(trainAISelectedIds, token);
+                      setTrainAIResult({ conclusion_text: res.conclusion_text });
+                    } catch (_) {
+                      setTrainAIResult({ conclusion_text: "Request failed." });
+                    } finally {
+                      setTrainAILoading(false);
+                    }
+                  }}
+                >
+                  {trainAILoading ? "Training..." : "Start training"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={modal.isOpen} onOpenChange={handleModalOpenChange}>
         <DialogContent className="max-h-[90vh] !max-w-[95vw] w-[95vw]">

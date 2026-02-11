@@ -1,0 +1,7 @@
+__APP_HOST__ {
+  reverse_proxy frontend:3000
+}
+
+__API_HOST__ {
+  reverse_proxy backend:8000
+}

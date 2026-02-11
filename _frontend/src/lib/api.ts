@@ -229,6 +229,17 @@ export const api = {
     },
   },
 
+  ai: {
+    async trainAi(sessionIds: number[], token?: string | null): Promise<{ id: number; conclusion_text: string | null; conclusion_data: Record<string, unknown> | null }> {
+      const res = await fetch(`${API_BASE}/ai/train`, {
+        method: "POST",
+        headers: headers(token),
+        body: JSON.stringify({ session_ids: sessionIds }),
+      });
+      return handleRes(res);
+    },
+  },
+
   machines: {
     async create(data: { name: string; type: string }, token?: string | null): Promise<{ id: number; user_id: number; name: string; type: string; created_at: string }> {
       const res = await fetch(`${API_BASE}/machines`, {
