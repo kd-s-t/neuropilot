@@ -2,11 +2,12 @@ import random
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.responses import JSONResponse
 import threading
 import numpy as np
 import os
 from config import init_db, get_db
-from routers import auth_router, eeg_router, websocket_router, training_router, machine_router, suggestions_router, ai_router
+from routers import auth_router, eeg_router, websocket_router, training_router, machine_router, suggestions_router, ai_router, tello_router, test_camera_router
 from routers.websocket import clients, has_control_trigger_subscribers
 from routers.health import router as health_router
 from controllers import EEGController, EventController
@@ -16,11 +17,20 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3000", "http://127.0.0.1:3001"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+def unhandled_to_503(request, exc):
+    from fastapi import HTTPException
+    if isinstance(exc, HTTPException):
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    return JSONResponse(status_code=503, content={"detail": str(exc)})
+
 
 eeg_controller = EEGController()
 event_controller = EventController()
@@ -41,6 +51,8 @@ app.include_router(training_router)
 app.include_router(machine_router)
 app.include_router(suggestions_router)
 app.include_router(ai_router)
+app.include_router(tello_router)
+app.include_router(test_camera_router)
 
 # Mount static files for blueprints
 blueprints_dir = "blueprints"

@@ -97,7 +97,6 @@ class MachineControlService:
             # Get bindings for this machine
             bindings = self.machine_controller.get_machine_bindings(machine.id, user_id, self.db)
             
-            # Get control positions to find webhook URLs and values
             control_positions = machine.control_positions or []
             control_configs = {
                 control.get("id"): {
@@ -105,32 +104,57 @@ class MachineControlService:
                     "value": control.get("value")
                 }
                 for control in control_positions
-                if control.get("id") and control.get("webhook_url")
+                if control.get("id")
             }
-            
+
             for binding in bindings:
-                # Get webhook config for this specific control
                 control_config = control_configs.get(binding.control_id)
-                if not control_config or not control_config.get("webhook_url"):
-                    continue  # Skip if no webhook URL for this control
-                
+                if not control_config:
+                    continue
                 webhook_url = control_config.get("webhook_url")
                 control_value = control_config.get("value")
-                
-                # Check if pattern matches this binding's training session
-                if self._pattern_matches(band_powers, binding.training_session_id, user_id):
-                    control_key = f"{machine.id}_{binding.control_id}"
-                    now = datetime.now()
-                    last = _global_last_trigger.get(control_key, _SENTINEL_OLD)
-                    if (now - last).total_seconds() >= self.min_command_interval:
-                        _global_last_trigger[control_key] = now
-                        await self._trigger_webhook(
-                            machine.id,
-                            webhook_url,
-                            binding.control_id,
-                            control_value,
-                            on_trigger=on_trigger,
+
+                if not self._pattern_matches(band_powers, binding.training_session_id, user_id):
+                    continue
+                control_key = f"{machine.id}_{binding.control_id}"
+                now = datetime.now()
+                last = _global_last_trigger.get(control_key, _SENTINEL_OLD)
+                if (now - last).total_seconds() < self.min_command_interval:
+                    continue
+                _global_last_trigger[control_key] = now
+
+                if webhook_url:
+                    await self._trigger_webhook(
+                        machine.id,
+                        webhook_url,
+                        binding.control_id,
+                        control_value,
+                        on_trigger=on_trigger,
+                    )
+                else:
+                    try:
+                        import tello as tello_module
+                        response = tello_module.send_command(binding.control_id, control_value)
+                        success = response is not None
+                        log = MachineLog(
+                            machine_id=machine.id,
+                            control_id=binding.control_id,
+                            webhook_url="internal://tello",
+                            value=control_value,
+                            success=success,
+                            status_code=200 if success else None,
+                            error_message=None,
+                            response_data=response
                         )
+                        self.db.add(log)
+                        self.db.commit()
+                    except Exception:
+                        pass
+                    if on_trigger:
+                        try:
+                            await on_trigger(machine.id, binding.control_id, control_value)
+                        except Exception:
+                            pass
 
     def _training_session_ids_by_name(self, user_id: int, event_name: str) -> List[int]:
         candidates = _event_name_to_session_name_candidates(EVENT_TO_CONTROL.get(event_name) or event_name)

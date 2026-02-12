@@ -5,7 +5,7 @@ const API_BASE =
     ? (process.env.BACKEND_URL ?? process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000")
     : (process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000");
 const WS_BASE = API_BASE.replace(/^http/, "ws");
-const TELLO_BASE = process.env.NEXT_PUBLIC_TELLO_BASE_URL ?? "http://localhost:8888";
+const TELLO_BASE = API_BASE;
 
 function headers(token?: string | null): HeadersInit {
   const h: Record<string, string> = { "Content-Type": "application/json" };
@@ -131,25 +131,72 @@ export const api = {
     },
   },
 
+  test: {
+    base: `${API_BASE}/test`,
+    videoUrl(): string {
+      return `${API_BASE}/test/video`;
+    },
+    async connect(): Promise<{ status?: string }> {
+      const res = await fetch(`${API_BASE}/test/connect`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail ?? data.message ?? "Connect failed");
+      return data;
+    },
+    async disconnect(): Promise<{ status?: string }> {
+      const res = await fetch(`${API_BASE}/test/disconnect`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      return data;
+    },
+    async getState(): Promise<Record<string, string>> {
+      try {
+        const res = await fetch(`${API_BASE}/test/state`);
+        if (!res.ok) return {};
+        return res.json();
+      } catch {
+        return {};
+      }
+    },
+    async getStatus(): Promise<{ last_error: string | null; stream_active: boolean; video_capture_set: boolean }> {
+      try {
+        const res = await fetch(`${API_BASE}/test/status`);
+        if (!res.ok) return { last_error: null, stream_active: false, video_capture_set: false };
+        return res.json();
+      } catch {
+        return { last_error: null, stream_active: false, video_capture_set: false };
+      }
+    },
+  },
+
   tello: {
     base: TELLO_BASE,
     videoUrl(): string {
-      return `${TELLO_BASE}/video`;
+      return `${TELLO_BASE}/tello/video`;
+    },
+    async connect(): Promise<{ status?: string }> {
+      const res = await fetch(`${TELLO_BASE}/tello/connect`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail ?? data.message ?? "Connect failed");
+      return data;
+    },
+    async disconnect(): Promise<{ status?: string }> {
+      const res = await fetch(`${TELLO_BASE}/tello/disconnect`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      return data;
     },
     async startStream(): Promise<{ success: boolean; message?: string }> {
-      const res = await fetch(`${TELLO_BASE}/video/start`, { method: "POST" });
+      const res = await fetch(`${TELLO_BASE}/tello/video/start`, { method: "POST" });
       const data = await res.json().catch(() => ({}));
       const msg = data.detail ?? data.message ?? (res.ok ? "OK" : "Failed to start stream");
       return { success: res.ok, message: msg };
     },
     async stopStream(): Promise<{ success: boolean; message?: string }> {
-      const res = await fetch(`${TELLO_BASE}/video/stop`, { method: "POST" });
+      const res = await fetch(`${TELLO_BASE}/tello/video/stop`, { method: "POST" });
       const data = await res.json().catch(() => ({}));
       return { success: res.ok, message: data.message };
     },
     async health(): Promise<{ status: string; tello_connected: boolean; video_receiver_running?: boolean; video_has_frames?: boolean } | null> {
       try {
-        const res = await fetch(`${TELLO_BASE}/health`);
+        const res = await fetch(`${TELLO_BASE}/tello/health`);
         if (!res.ok) return null;
         return res.json();
       } catch {
@@ -158,7 +205,7 @@ export const api = {
     },
     async battery(): Promise<{ battery: number | null; message?: string }> {
       try {
-        const res = await fetch(`${TELLO_BASE}/battery`);
+        const res = await fetch(`${TELLO_BASE}/tello/battery`);
         const data = await res.json().catch(() => ({}));
         return { battery: data.battery ?? null, message: data.message };
       } catch {

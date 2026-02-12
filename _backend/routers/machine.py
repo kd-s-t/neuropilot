@@ -173,57 +173,56 @@ async def trigger_webhook(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Trigger a webhook for a control and log the result"""
-    # Verify machine belongs to user
     machine = machine_controller.get_machine(machine_id, current_user.id, db)
     if not machine:
         raise HTTPException(status_code=404, detail="Machine not found")
-    
-    # Verify control exists in machine
     control_positions = machine.control_positions or []
     control = next((c for c in control_positions if c.get("id") == request.control_id), None)
     if not control:
         raise HTTPException(status_code=404, detail="Control not found")
-    
-    # Verify webhook URL matches
-    if control.get("webhook_url") != request.webhook_url:
+    use_internal = not (request.webhook_url or "").strip() or request.webhook_url == "internal://tello"
+    if not use_internal and control.get("webhook_url") != request.webhook_url:
         raise HTTPException(status_code=400, detail="Webhook URL does not match control configuration")
-    
-    # Trigger webhook
+
     success = False
     status_code = None
     error_message = None
     response_data = None
-    
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.post(
-                request.webhook_url,
-                json={
-                    "control_id": request.control_id,
-                    "value": request.value
-                }
-            )
-            status_code = response.status_code
-            
-            try:
-                response_data = json.dumps(response.json())
-            except:
-                response_data = response.text[:1000]  # Limit to 1000 chars
-            
-            if response.status_code == 200:
-                result = response.json()
-                success = result.get('success', True)
-            else:
-                error_message = f"HTTP {response.status_code}: {response.text[:500]}"
-    except Exception as e:
-        error_message = str(e)[:1000]  # Limit to 1000 chars
-    
-    # Log the webhook call
+    webhook_url = request.webhook_url or "internal://tello"
+
+    if use_internal:
+        try:
+            import tello as tello_module
+            response = tello_module.send_command(request.control_id, request.value)
+            success = response is not None
+            status_code = 200
+            response_data = response
+        except Exception as e:
+            error_message = str(e)[:1000]
+    else:
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.post(
+                    request.webhook_url,
+                    json={"control_id": request.control_id, "value": request.value}
+                )
+                status_code = response.status_code
+                try:
+                    response_data = json.dumps(response.json())
+                except Exception:
+                    response_data = response.text[:1000]
+                if response.status_code == 200:
+                    result = response.json()
+                    success = result.get('success', True)
+                else:
+                    error_message = f"HTTP {response.status_code}: {response.text[:500]}"
+        except Exception as e:
+            error_message = str(e)[:1000]
+
     log = MachineLog(
         machine_id=machine_id,
         control_id=request.control_id,
-        webhook_url=request.webhook_url,
+        webhook_url=webhook_url,
         value=request.value,
         success=success,
         status_code=status_code,
@@ -233,5 +232,4 @@ async def trigger_webhook(
     db.add(log)
     db.commit()
     db.refresh(log)
-    
     return log

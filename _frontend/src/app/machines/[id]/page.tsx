@@ -50,7 +50,6 @@ export default function MachinePage() {
   const [showControlsDialog, setShowControlsDialog] = useState(false);
   const [showSimulator, setShowSimulator] = useState(false);
   const [showConnectModal, setShowConnectModal] = useState(false);
-  const [showTelloColumn, setShowTelloColumn] = useState(false);
   const [showLogsModal, setShowLogsModal] = useState(false);
   const [machineLogs, setMachineLogs] = useState<Array<{ id: number; machine_id: number; control_id: string; webhook_url: string; value: number | null; success: boolean; status_code: number | null; error_message: string | null; response_data: string | null; created_at: string }>>([]);
   const [logsLoading, setLogsLoading] = useState(false);
@@ -558,26 +557,15 @@ export default function MachinePage() {
                 );
               })()}
             </DialogTitle>
-            {!showTelloColumn && (
-              <Button variant="outline" size="sm" onClick={() => setShowTelloColumn(true)}>
-                Show Tello camera
-              </Button>
-            )}
           </DialogHeader>
-          {showTelloColumn ? (
-            <div className="grid grid-cols-2 gap-4 flex-1 min-h-0">
-              <div className="flex flex-col min-h-0 min-w-0">
-                <TelloCamera className="flex-1 min-h-[280px]" autoStart={true} onHide={() => setShowTelloColumn(false)} />
-              </div>
-              <div className="flex flex-col min-h-0 min-w-0">
-                <BrainwavePanel className="flex-1 min-h-[280px]" enabled={showConnectModal} />
-              </div>
+          <div className="flex flex-col flex-1 min-h-0 gap-4">
+            <div className="flex-1 min-h-0 min-w-0">
+              <TelloCamera className="h-full min-h-[280px]" autoStart={false} useTestApi />
             </div>
-          ) : (
-            <div className="flex flex-col flex-1 min-h-0 min-w-0">
-              <BrainwavePanel className="flex-1 min-h-[280px]" enabled={showConnectModal} />
+            <div className="h-[50px] w-full flex-shrink-0 min-h-0">
+              <BrainwavePanel className="h-full w-full" enabled={showConnectModal} />
             </div>
-          )}
+          </div>
         </DialogContent>
       </Dialog>
       </motion.div>

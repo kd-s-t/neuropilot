@@ -227,13 +227,13 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
   }, [token, machine.id]);
 
   const handleWebhookTrigger = useCallback(async (control: Control) => {
-    if (!control.webhook_url || !token) return;
-    
+    if (!token) return;
+
     setWebhookLoading(control.id);
     try {
       const log = await api.machines.triggerWebhook(machine.id, {
         control_id: control.id,
-        webhook_url: control.webhook_url,
+        webhook_url: (control as any).webhook_url || "internal://tello",
         value: control.value,
       }, token);
       

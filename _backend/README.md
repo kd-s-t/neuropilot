@@ -67,6 +67,12 @@ uvicorn app:app --reload
 
 **Note:** The backend does not search for a Muse stream at startup. When muselsl is running, use `POST /eeg/reconnect` to connect to the EEG stream (or start muselsl before the backend and call reconnect from the app).
 
+**DJI Camera (same env as np camera):** If you run np camera with a different Python (e.g. one where opencv works), use that same interpreter for neuropilot so the Tello stream works. From the np camera backend directory run `which python`, then from neuropilot backend run:
+```bash
+NEUROPILOT_PYTHON=/path/from/which/python ./start_server.sh
+```
+That Python must have neuropilot dependencies installed (`pip install -r requirements.txt`).
+
 ### Linux
 ```bash
 uvicorn app:app --reload

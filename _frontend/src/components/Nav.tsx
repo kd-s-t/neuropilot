@@ -14,6 +14,7 @@ const links = [
   { href: "/eeg-device-calibration", label: "EEG Device Calibration" },
   { href: "/lab", label: "Lab" },
   { href: "/machines", label: "Machines" },
+  { href: "/dji-camera", label: "DJI Camera" },
 ];
 
 export default function Nav() {
@@ -64,7 +65,7 @@ export default function Nav() {
               // Check if active - for /machines, also match /machines/* routes
               const isActive = pathname === href || (href === "/machines" && pathname.startsWith("/machines/"));
               // Only show protected routes if authenticated
-              if (!isAuthenticated && (href === "/realtime" || href === "/training" || href === "/machines" || href === "/eeg-device-calibration" || href === "/lab")) {
+              if (!isAuthenticated && (href === "/realtime" || href === "/training" || href === "/machines" || href === "/eeg-device-calibration" || href === "/lab" || href === "/dji-camera")) {
                 return null;
               }
               return (
