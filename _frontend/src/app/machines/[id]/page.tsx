@@ -16,7 +16,7 @@ import BrainwavePanel from "@/components/BrainwavePanel";
 import EEGChart from "@/components/EEGChart";
 import { useEegWebSocket } from "@/hooks";
 import Image from "next/image";
-import { Plus, Drone, Battery, BatteryLow, BatteryMedium, BatteryFull, WifiOff, RadioTower } from "lucide-react";
+import { Plus, Drone, Battery } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -532,35 +532,10 @@ export default function MachinePage() {
         </DialogContent>
       </Dialog>
       <Dialog open={showConnectModal} onOpenChange={setShowConnectModal}>
-        <DialogContent className="max-w-5xl w-[90vw] h-[85vh] flex flex-col">
-          <DialogHeader className="flex flex-row items-center justify-between gap-4">
-            <DialogTitle className="flex items-center gap-2">
-              {connectBattery != null ? (() => {
-                const pct = connectBattery;
-                const color = pct > 66 ? "text-green-500" : pct > 33 ? "text-yellow-500" : "text-red-500";
-                return (
-                  <span className={`${color} animate-pulse`} aria-label="Live">
-                    <RadioTower className="h-4 w-4" />
-                  </span>
-                );
-              })() : (
-                <span title="Disconnected" aria-label="Disconnected"><WifiOff className="h-4 w-4 text-muted-foreground" /></span>
-              )}
-              {connectBattery != null && (() => {
-                const pct = connectBattery;
-                const Icon = pct <= 25 ? BatteryLow : pct <= 50 ? BatteryMedium : BatteryFull;
-                return (
-                  <span className="flex items-center gap-1 ml-1 text-muted-foreground" title={`${pct}%`}>
-                    <Icon className="h-4 w-4" />
-                    <span className="text-xs font-normal">{pct}%</span>
-                  </span>
-                );
-              })()}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col flex-1 min-h-0 gap-4">
-            <div className="flex-1 min-h-0 min-w-0">
-              <TelloCamera className="h-full min-h-[280px]" autoStart={false} useTestApi />
+        <DialogContent className="max-w-5xl w-[90vw] h-[85vh] flex flex-col p-0 overflow-hidden">
+          <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            <div className="flex-1 min-h-0 min-w-0 overflow-hidden max-h-[72vh]">
+              <TelloCamera className="h-full min-h-0" autoStart={false} useTestApi />
             </div>
             <div className="h-[50px] w-full flex-shrink-0 min-h-0">
               <BrainwavePanel className="h-full w-full" enabled={showConnectModal} />

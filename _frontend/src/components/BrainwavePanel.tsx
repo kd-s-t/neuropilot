@@ -65,7 +65,7 @@ export default function BrainwavePanel({ className = "", enabled = true }: Brain
   if (status === null && enabled) {
     return (
       <div
-        className={`flex flex-col items-center justify-center rounded-lg border border-border bg-muted/30 p-6 ${className}`}
+        className={`flex flex-col items-center justify-center rounded-lg border border-border bg-muted/30 p-6 min-h-[200px] ${className}`}
       >
         <p className="text-sm text-muted-foreground">Checking...</p>
       </div>
@@ -75,7 +75,7 @@ export default function BrainwavePanel({ className = "", enabled = true }: Brain
   if (noMuse && !listening) {
     return (
       <div
-        className={`flex flex-col items-center justify-center rounded-lg border border-border bg-muted/30 p-6 ${className}`}
+        className={`flex flex-col items-center justify-center rounded-lg border border-border bg-muted/30 p-6 min-h-[100px] ${className}`}
       >
         <p className="text-sm text-muted-foreground text-center">No Muse detected</p>
         <p className="text-xs text-muted-foreground mt-1 text-center">

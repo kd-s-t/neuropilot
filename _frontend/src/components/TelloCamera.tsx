@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { WifiOff, RadioTower } from "lucide-react";
 import { api } from "@/lib/api";
 
 const TELLO_UNAVAILABLE_KEY = "tello_unavailable_ts";
@@ -188,8 +189,13 @@ export default function TelloCamera({ className = "", autoStart = true, onHide, 
   return (
     <div className={`flex flex-col min-w-[280px] rounded-lg border border-border overflow-hidden ${offline ? "bg-muted/30" : "bg-black"} ${className}`}>
       <div className="px-2 py-1 bg-muted/50 border-b border-border flex items-center justify-between gap-2">
-        <span className="text-xs text-black">Tello camera</span>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
+          {telloConnected ? (
+            <RadioTower className="h-3.5 w-3.5 text-green-500 shrink-0" aria-label="Connected" />
+          ) : (
+            <WifiOff className="h-3.5 w-3.5 text-muted-foreground shrink-0" aria-label="Disconnected" />
+          )}
+          <div className="flex items-center gap-1">
           {telloConnected && (
             <Button variant="outline" size="sm" onClick={openInfo}>
               Info
@@ -204,9 +210,11 @@ export default function TelloCamera({ className = "", autoStart = true, onHide, 
               {starting ? "Connecting..." : "Connect"}
             </Button>
           )}
+          </div>
         </div>
+        <span className="text-xs text-black">Tello camera</span>
       </div>
-      <div className="relative flex-1 min-h-[200px] flex items-center justify-center">
+      <div className="relative flex-1 min-h-0 flex items-center justify-center overflow-hidden">
         {offline ? (
           <div className="relative flex flex-col items-center justify-center gap-3 p-6 text-center w-full">
             <div className="w-full max-w-[200px] aspect-video rounded bg-muted flex items-center justify-center border border-border">
