@@ -180,9 +180,13 @@ async def trigger_webhook(
     control = next((c for c in control_positions if c.get("id") == request.control_id), None)
     if not control:
         raise HTTPException(status_code=404, detail="Control not found")
-    use_internal = not (request.webhook_url or "").strip() or request.webhook_url == "internal://tello"
-    if not use_internal and control.get("webhook_url") != request.webhook_url:
-        raise HTTPException(status_code=400, detail="Webhook URL does not match control configuration")
+    req_url = (request.webhook_url or "").strip()
+    ctrl_url = (control.get("webhook_url") or "").strip()
+    request_internal = not req_url or req_url == "internal://tello"
+    control_internal = not ctrl_url or ctrl_url == "internal://tello"
+    use_internal = request_internal or control_internal
+    if not use_internal and ctrl_url != req_url:
+        raise HTTPException(status_code=400, detail="Command target URL does not match control configuration")
 
     success = False
     status_code = None
@@ -197,6 +201,8 @@ async def trigger_webhook(
             success = response is not None
             status_code = 200
             response_data = response
+            if not success:
+                error_message = "Tello not connected or command not acknowledged. Connect to the drone on the machine page first."
         except Exception as e:
             error_message = str(e)[:1000]
     else:

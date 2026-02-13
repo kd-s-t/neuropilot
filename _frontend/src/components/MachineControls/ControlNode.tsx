@@ -162,18 +162,18 @@ export default function ControlNode({ data }: any) {
         )}
       </div>
       <div className="flex items-center gap-1 self-start">
-        {(control as any).webhook_url && onWebhookTrigger && (
+        {onWebhookTrigger && (
           <Button
             variant="ghost"
             size="sm"
             onClick={() => onWebhookTrigger(control)}
             disabled={webhookLoading}
             className="h-[10px] w-[10px] p-0 flex items-center justify-center"
-            title="Trigger webhook"
+            title="Trigger command"
           >
             <Image
               src="/webhooks.png"
-              alt="Trigger webhook"
+              alt="Trigger command"
               width={10}
               height={10}
               className={`object-contain w-full h-full origin-[51%_49%] ${webhookLoading ? "animate-spin" : ""}`}

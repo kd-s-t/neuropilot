@@ -248,14 +248,46 @@ async def _execute_accumulated_impl(
     drone_state = _get_drone_state()
     use_yolo = not is_machine_in_simulate_mode(machine_id)
     jpeg_bytes = _get_latest_jpeg_bytes() if use_yolo else None
-    obstacles = _run_yolo(jpeg_bytes) if jpeg_bytes else None
+    obstacles = None
+    if jpeg_bytes and use_yolo:
+        print("Calling YOLO")
+        obstacles = _run_yolo(jpeg_bytes)
+        print("YOLO obstacles:", obstacles)
+    elif jpeg_bytes:
+        obstacles = None
     camera_b64 = base64.b64encode(jpeg_bytes).decode("ascii") if jpeg_bytes else None
+    print("Calling AI", "actions=", actions, "obstacles=", obstacles)
     commands = _openai_decide(actions, drone_state, camera_b64, obstacles=obstacles)
+    print("AI commands:", commands)
     import tello as tello_module
+    LOW_BATTERY_TAKEOFF_THRESHOLD = 10
     for c in commands:
         control_id = (c.get("control_id") or "land").strip()
         value = c.get("value") if isinstance(c.get("value"), (int, float)) else 20
+        is_takeoff = control_id.lower() in ("start", "takeoff")
+        if is_takeoff and isinstance(drone_state.get("battery"), (int, float)) and drone_state["battery"] < LOW_BATTERY_TAKEOFF_THRESHOLD:
+            print("Skipping takeoff: battery", drone_state["battery"], "% below", LOW_BATTERY_TAKEOFF_THRESHOLD)
+            log = MachineLog(
+                machine_id=machine_id,
+                control_id=control_id,
+                webhook_url="internal://tello",
+                value=int(value),
+                success=False,
+                status_code=None,
+                error_message=f"Tello battery {drone_state['battery']}% is too low for takeoff (min {LOW_BATTERY_TAKEOFF_THRESHOLD}%). Charge the drone.",
+                response_data=None,
+            )
+            db.add(log)
+            db.commit()
+            if on_trigger:
+                try:
+                    await on_trigger(machine_id, control_id, int(value) if isinstance(value, (int, float)) else None)
+                except Exception:
+                    pass
+            await asyncio.sleep(0.2)
+            continue
         try:
+            print("Action sent:", "control_id=", control_id, "value=", int(value))
             response = tello_module.send_command(control_id, int(value))
             success = response is not None
             log = MachineLog(

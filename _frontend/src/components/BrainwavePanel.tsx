@@ -103,8 +103,8 @@ export default function BrainwavePanel({ className = "", enabled = true }: Brain
   }
 
   return (
-    <div className={`flex flex-col rounded-lg border border-border overflow-hidden ${className}`}>
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/30">
+    <div className={`flex flex-col rounded-lg border border-border overflow-hidden min-h-0 ${className}`}>
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/30 flex-shrink-0">
         <span className="text-sm font-medium">Brainwave</span>
         {status?.connected && (
           <span className="text-xs text-muted-foreground">
@@ -122,10 +122,10 @@ export default function BrainwavePanel({ className = "", enabled = true }: Brain
           </Button>
         )}
       </div>
-      <div className="flex-1 min-h-[200px] p-2 flex flex-col">
+      <div className="flex-1 min-h-0 p-2 flex flex-col overflow-hidden">
         {listening && (
-          <div className="h-[200px] w-full">
-            <EEGChart eegData={eegData} />
+          <div className="flex-1 min-h-[200px] w-full min-h-0">
+            <EEGChart eegData={eegData} className="h-full w-full" />
           </div>
         )}
         {status?.connected && (

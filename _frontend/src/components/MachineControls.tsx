@@ -77,8 +77,6 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
   const [newControlDescription, setNewControlDescription] = useState("");
   const [newControlIcon, setNewControlIcon] = useState("");
   const [newControlBgColor, setNewControlBgColor] = useState("");
-  const [newControlWebhookUrl, setNewControlWebhookUrl] = useState("");
-  const [newControlValue, setNewControlValue] = useState<string>("");
   const [savingControls, setSavingControls] = useState(false);
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [controlIdError, setControlIdError] = useState<string | null>(null);
@@ -89,7 +87,6 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
   const [saveError, setSaveError] = useState<string | null>(null);
   const [machineLogs, setMachineLogs] = useState<Array<{ id: number; machine_id: number; control_id: string; webhook_url: string; value: number | null; success: boolean; status_code: number | null; error_message: string | null; response_data: string | null; created_at: string }>>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
-  const [webhookUrlError, setWebhookUrlError] = useState<string | null>(null);
   const savedPositionsRef = useRef<Record<string, { x: number; y: number }>>({});
   const prevMachineRef = useRef<Machine | null>(null);
   const rfInstanceRef = useRef<any>(null);
@@ -131,7 +128,7 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
       
       return null; // Valid
     } catch (e) {
-      return 'Invalid webhook URL format. Use format: http://localhost:8888/command';
+      return 'Invalid webhook URL format. Leave empty for built-in Tello, or use an external URL ending with /command or /controls.';
     }
   };
 
@@ -231,27 +228,29 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
 
     setWebhookLoading(control.id);
     try {
+      const rawUrl = (control as any).webhook_url ?? "";
+      const useInternal = !rawUrl.trim() || rawUrl === "internal://tello";
       const log = await api.machines.triggerWebhook(machine.id, {
         control_id: control.id,
-        webhook_url: (control as any).webhook_url || "internal://tello",
+        webhook_url: useInternal ? "internal://tello" : rawUrl.trim(),
         value: control.value,
       }, token);
       
       if (!log.success) {
-        throw new Error(log.error_message || "Webhook failed");
+        throw new Error(log.error_message || "Command failed");
       }
       
       console.log(`Webhook triggered for ${control.id}:`, log);
       const controlName = control.description || control.id;
-      toast.success(`Webhook triggered successfully for ${controlName}`);
+      toast.success(`Command triggered successfully for ${controlName}`);
       // Refresh logs after triggering webhook
       if (pendingControlId === control.id) {
         await fetchMachineLogs(control.id);
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
-      console.error(`Error triggering webhook for ${control.id}:`, error);
-      const fullMessage = `Failed to trigger webhook: ${errorMessage}`;
+      console.error(`Error triggering command for ${control.id}:`, error);
+      const fullMessage = `Failed to trigger command: ${errorMessage}`;
       toast.danger(fullMessage);
     } finally {
       setWebhookLoading(null);
@@ -393,10 +392,8 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
       setNewControlDescription("");
       setNewControlIcon("");
       setNewControlBgColor("");
-      setNewControlWebhookUrl("");
       setControlIdError(null);
-      setWebhookUrlError(null);
-      
+
       // Show success toast for add/update (unless caller requested silent)
       if (!opts?.silent) {
         if (addedIds.length > 0) {
@@ -417,7 +414,6 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
 
   const handleAddControl = () => {
     setControlIdError(null);
-    setWebhookUrlError(null);
     if (!newControlId.trim()) {
       setControlIdError("Control ID is required");
       return;
@@ -426,29 +422,13 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
       setControlIdError("Control ID already exists");
       return;
     }
-    // Validate webhook URL
-    if (newControlWebhookUrl.trim()) {
-      const error = validateWebhookUrl(newControlWebhookUrl);
-      if (error) {
-        setWebhookUrlError(error);
-        return;
-      }
-    }
-    // Create control with temporary position - handleSaveControls will set proper position
-    const valueNum = newControlValue.trim() ? parseInt(newControlValue.trim(), 10) : undefined;
-    // Normalize webhook URL before saving
-    const normalizedWebhookUrl = newControlWebhookUrl.trim() 
-      ? normalizeWebhookUrl(newControlWebhookUrl.trim()) 
-      : "";
-    const newControl: Control = { 
-      id: newControlId.trim(), 
+    const newControl: Control = {
+      id: newControlId.trim(),
       x: 1,
       y: 1,
       ...(newControlDescription.trim() ? { description: newControlDescription.trim() } : {}),
       ...(newControlIcon.trim() ? { icon: newControlIcon.trim() } : {}),
       ...(newControlBgColor.trim() ? { bgColor: newControlBgColor.trim() } : {}),
-      ...(normalizedWebhookUrl ? { webhook_url: normalizedWebhookUrl } : {}),
-      ...(valueNum !== undefined && !isNaN(valueNum) ? { value: valueNum } : {}),
     };
     handleSaveControls([...controls, newControl]);
   };
@@ -459,22 +439,11 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
     setNewControlDescription(control.description || "");
     setNewControlIcon(control.icon || "");
     setNewControlBgColor(control.bgColor || "");
-    const webhookUrl = control.webhook_url || "";
-    setNewControlWebhookUrl(webhookUrl);
-    setNewControlValue(control.value !== undefined ? String(control.value) : "");
     setControlIdError(null);
-    // Validate existing webhook URL
-    if (webhookUrl) {
-      const error = validateWebhookUrl(webhookUrl);
-      setWebhookUrlError(error);
-    } else {
-      setWebhookUrlError(null);
-    }
   };
 
   const handleUpdateControl = () => {
     setControlIdError(null);
-    setWebhookUrlError(null);
     if (!editingControl || !newControlId.trim()) {
       setControlIdError("Control ID is required");
       return;
@@ -483,30 +452,16 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
       setControlIdError("Control ID already exists");
       return;
     }
-    // Validate webhook URL
-    if (newControlWebhookUrl.trim()) {
-      const error = validateWebhookUrl(newControlWebhookUrl);
-      if (error) {
-        setWebhookUrlError(error);
-        return;
-      }
-    }
-    const valueNum = newControlValue.trim() ? parseInt(newControlValue.trim(), 10) : undefined;
-    // Normalize webhook URL before saving
-    const normalizedWebhookUrl = newControlWebhookUrl.trim() 
-      ? normalizeWebhookUrl(newControlWebhookUrl.trim()) 
-      : "";
-    const updatedControls = controls.map(c => 
-      c.id === editingControl.id 
-        ? { 
+    const updatedControls = controls.map(c =>
+      c.id === editingControl.id
+        ? {
+            ...c,
             id: newControlId.trim(),
             x: c.x,
             y: c.y,
             ...(newControlDescription.trim() ? { description: newControlDescription.trim() } : {}),
             ...(newControlIcon.trim() ? { icon: newControlIcon.trim() } : {}),
             ...(newControlBgColor.trim() ? { bgColor: newControlBgColor.trim() } : {}),
-            ...(normalizedWebhookUrl ? { webhook_url: normalizedWebhookUrl } : {}),
-            ...(valueNum !== undefined && !isNaN(valueNum) ? { value: valueNum } : {}),
           }
         : c
     );
@@ -1158,10 +1113,7 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
                     setNewControlDescription("");
                     setNewControlIcon("");
                     setNewControlBgColor("");
-                    setNewControlWebhookUrl("");
-                    setNewControlValue("");
                     setControlIdError(null);
-                    setWebhookUrlError(null);
                     // Return to choice dialog if we came from there
                     if (pendingControlId) {
                       setShowControlChoiceDialog(true);
@@ -1218,59 +1170,6 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
                 disabled={savingControls}
               />
             </div>
-            <div className="space-y-2">
-              <Label>Webhook URL (Optional)</Label>
-              <Input
-                value={newControlWebhookUrl}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setNewControlWebhookUrl(value);
-                  const error = validateWebhookUrl(value);
-                  setWebhookUrlError(error);
-                  // Auto-normalize on blur
-                  if (value.trim() && !error) {
-                    const normalized = normalizeWebhookUrl(value);
-                    if (normalized !== value) {
-                      // Update after a short delay to avoid caret jumping
-                      setTimeout(() => {
-                        setNewControlWebhookUrl(normalized);
-                      }, 100);
-                    }
-                  }
-                }}
-                onBlur={(e) => {
-                  const value = e.target.value;
-                  if (value.trim()) {
-                    const normalized = normalizeWebhookUrl(value);
-                    if (normalized !== value) {
-                      setNewControlWebhookUrl(normalized);
-                    }
-                    const error = validateWebhookUrl(normalized);
-                    setWebhookUrlError(error);
-                  }
-                }}
-                placeholder="e.g., http://localhost:8888/command"
-                disabled={savingControls}
-              />
-              {webhookUrlError && (
-                <Alert variant="destructive" className="mt-1">
-                  <AlertDescription className="text-xs">{webhookUrlError}</AlertDescription>
-                </Alert>
-              )}
-              <p className="text-xs text-muted-foreground">
-                Use <code className="text-xs bg-muted px-1 py-0.5 rounded">/command</code> or <code className="text-xs bg-muted px-1 py-0.5 rounded">/controls</code>. The control_id will be sent in the JSON body.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label>Value (Optional)</Label>
-              <Input
-                type="number"
-                value={newControlValue}
-                onChange={(e) => setNewControlValue(e.target.value)}
-                placeholder="e.g., 20 (distance in cm or angle in degrees)"
-                disabled={savingControls}
-              />
-            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Icon (Optional)</Label>
@@ -1321,10 +1220,7 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
                       setNewControlDescription("");
                       setNewControlIcon("");
                       setNewControlBgColor("");
-                      setNewControlWebhookUrl("");
-                      setNewControlValue("");
                       setControlIdError(null);
-                      setWebhookUrlError(null);
 
                       // If we opened Manage Control from the control choice dialog,
                       // return to the choice menu (Manage / Bind / Logs). Otherwise, close the dialog.

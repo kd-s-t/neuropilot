@@ -126,6 +126,41 @@ export default function Lab() {
   const [modalEditNotes, setModalEditNotes] = useState("");
   const [modalSaveStatus, setModalSaveStatus] = useState<"idle" | "saving" | "success" | "error">("idle");
   const [modalSaveMessage, setModalSaveMessage] = useState("");
+  const [eegStreamBackendStatus, setEegStreamBackendStatus] = useState<{ connected: boolean; message: string; has_data: boolean } | null>(null);
+  const [eegStreamReconnecting, setEegStreamReconnecting] = useState(false);
+  const [eegGraphResetKey, setEegGraphResetKey] = useState(0);
+
+  useEffect(() => {
+    if (!isListening) return;
+    const check = async () => {
+      try {
+        const s = await api.eeg.getStatus();
+        setEegStreamBackendStatus(s);
+      } catch {
+        setEegStreamBackendStatus({ connected: false, message: "Failed to get status", has_data: false });
+      }
+    };
+    check();
+    const id = setInterval(check, 5000);
+    return () => clearInterval(id);
+  }, [isListening]);
+
+  const handleEegStreamReconnectMuse = useCallback(async () => {
+    setEegStreamReconnecting(true);
+    try {
+      const result = await api.eeg.reconnect();
+      if (result.success) {
+        const s = await api.eeg.getStatus();
+        setEegStreamBackendStatus(s);
+      } else {
+        setEegStreamBackendStatus({ connected: false, message: result.message ?? "Reconnect failed", has_data: false });
+      }
+    } catch {
+      setEegStreamBackendStatus({ connected: false, message: "Reconnect failed", has_data: false });
+    } finally {
+      setEegStreamReconnecting(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (modal.selectedSession) {
@@ -234,7 +269,7 @@ export default function Lab() {
       if (arenaMode === "2d") {
         setPosition((pos) => {
           let { x, y } = pos;
-          if (d > 1_000_000) y = Math.max(y - 10, 0);
+          if (d > 15_000_000) y = Math.max(y - 10, 0);
           if (t > 200_000) x = Math.max(x - 10, 0);
           if (a > 200_000) x = Math.min(x + 10, CANVAS_WIDTH - BOX_SIZE);
           if (b > 100_000) y = Math.min(y + 10, CANVAS_HEIGHT - BOX_SIZE);
@@ -573,7 +608,7 @@ export default function Lab() {
               <h3 className="mb-3 text-sm font-medium">Brainwave controls</h3>
               {arenaMode === "2d" ? (
                 <ul className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm text-muted-foreground sm:grid-cols-2">
-                  <li><span className="font-medium text-foreground">Delta</span> (deep focus) → <strong>up</strong> · Power &gt; 1M</li>
+                  <li><span className="font-medium text-foreground">Delta</span> → <strong>up</strong> · if Delta goes 15M it&apos;s up</li>
                   <li><span className="font-medium text-foreground">Theta</span> → <strong>left</strong> · Power &gt; 200k</li>
                   <li><span className="font-medium text-foreground">Alpha</span> → <strong>right</strong> · Power &gt; 200k</li>
                   <li><span className="font-medium text-foreground">Beta</span> → <strong>down</strong> · Power &gt; 100k</li>
@@ -672,9 +707,41 @@ export default function Lab() {
           <CardHeader className="!pb-2">
             <CardTitle>EEG Data Stream</CardTitle>
             <CardDescription>Real-time brainwave monitoring</CardDescription>
+            {isListening && (
+              <div className="mt-1 flex items-center gap-2 flex-wrap">
+                {eegStreamBackendStatus && (
+                  <>
+                    <p className={`text-xs ${eegStreamBackendStatus.connected && eegStreamBackendStatus.has_data ? "text-green-600" : "text-yellow-600"}`}>
+                      Muse 2: {eegStreamBackendStatus.message}
+                      {eegStreamBackendStatus.connected && !eegStreamBackendStatus.has_data && " (waiting for data...)"}
+                    </p>
+                    {!eegStreamBackendStatus.connected && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleEegStreamReconnectMuse}
+                        disabled={eegStreamReconnecting}
+                        className="h-6 text-xs"
+                      >
+                        {eegStreamReconnecting ? "Reconnecting..." : "Reconnect to Muse 2"}
+                      </Button>
+                    )}
+                  </>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEegGraphResetKey((k) => k + 1)}
+                  className="h-6 text-xs ml-auto"
+                >
+                  Reset graph
+                </Button>
+              </div>
+            )}
           </CardHeader>
           <CardContent className="space-y-4 !pt-2 !pb-2">
             <EEGDeviceCalibration
+              key={eegGraphResetKey}
               hideControls
               externalListening={isListening}
             />

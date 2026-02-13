@@ -588,8 +588,8 @@ export default function DroneScene({
 
       const cmd = eegCommandRef?.current;
       const eegStartRequest = !!cmd?.start;
-      const startPulseMs = cmd?.startTriggeredAt ? Date.now() - cmd.startTriggeredAt : Infinity;
-      const eegStartPulse = startPulseMs < 1000;
+      const startPulseMs = cmd?.startTriggeredAt != null ? Date.now() - cmd.startTriggeredAt : Infinity;
+      const eegStartPulse = startPulseMs < 6000;
       if (eegStartRequest) {
         eegStartHeldTime += dt;
       } else {

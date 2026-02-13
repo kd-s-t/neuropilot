@@ -65,6 +65,41 @@ export default function MachinePage() {
     Gamma: { power: [] as number[], range: [30, 100] as [number, number] },
   };
   const [simulatorEegData, setSimulatorEegData] = useState(SIMULATOR_EEG_INITIAL);
+  const [simulatorEegBackendStatus, setSimulatorEegBackendStatus] = useState<{ connected: boolean; message: string; has_data: boolean } | null>(null);
+  const [simulatorReconnecting, setSimulatorReconnecting] = useState(false);
+
+  useEffect(() => {
+    if (!showSimulator) return;
+    const check = async () => {
+      try {
+        const s = await api.eeg.getStatus();
+        setSimulatorEegBackendStatus(s);
+      } catch {
+        setSimulatorEegBackendStatus({ connected: false, message: "Failed to get status", has_data: false });
+      }
+    };
+    check();
+    const id = setInterval(check, 5000);
+    return () => clearInterval(id);
+  }, [showSimulator]);
+
+  const handleSimulatorReconnectMuse = useCallback(async () => {
+    setSimulatorReconnecting(true);
+    try {
+      const result = await api.eeg.reconnect();
+      if (result.success) {
+        const s = await api.eeg.getStatus();
+        setSimulatorEegBackendStatus(s);
+      } else {
+        setSimulatorEegBackendStatus({ connected: false, message: result.message ?? "Reconnect failed", has_data: false });
+      }
+    } catch {
+      setSimulatorEegBackendStatus({ connected: false, message: "Reconnect failed", has_data: false });
+    } finally {
+      setSimulatorReconnecting(false);
+    }
+  }, []);
+
   const handleSimulatorEegMessage = useCallback(
     (data: Record<string, { power: number; range?: [number, number] }>) => {
       const hasValid = Object.values(data).some((b) => b && typeof b.power === "number");
@@ -95,23 +130,32 @@ export default function MachinePage() {
     turnRight: false,
   });
 
+  const simulatorStartClearTimeoutRef = useRef<number | null>(null);
   useEffect(() => {
-    if (!showSimulator || machineId == null) return;
+    if ((!showSimulator && !showConnectModal) || machineId == null) return;
     const simulate = !showConnectModal;
     const ws = api.ws.createControlTriggers(machineId, simulate);
     type EegCommandKey = Exclude<keyof EegCommand, "startTriggeredAt">;
     const controlIdToKey: Record<string, EegCommandKey> = {
       Start: "start",
+      start: "start",
+      takeoff: "start",
       Forward: "forward",
+      forward: "forward",
       Reverse: "back",
+      back: "back",
       Left: "left",
+      left: "left",
       Right: "right",
+      right: "right",
       Up: "up",
+      up: "up",
       Down: "down",
+      down: "down",
       "Turn Left": "turnLeft",
       "Turn Right": "turnRight",
     };
-    const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, " ");
+    const normalize = (s: string) => (s || "").toLowerCase().replace(/\s+/g, " ");
     const byNormalized: Record<string, EegCommandKey> = {};
     Object.entries(controlIdToKey).forEach(([k, v]) => { byNormalized[normalize(k)] = v; });
     ws.onmessage = (event) => {
@@ -126,22 +170,29 @@ export default function MachinePage() {
           simulatorEegCommandRef.current[key] = true;
           if (key === "start") {
             simulatorEegCommandRef.current.startTriggeredAt = Date.now();
+            if (simulatorStartClearTimeoutRef.current) clearTimeout(simulatorStartClearTimeoutRef.current);
+            simulatorStartClearTimeoutRef.current = window.setTimeout(() => {
+              if (simulatorEegCommandRef.current) {
+                simulatorEegCommandRef.current.start = false;
+                simulatorEegCommandRef.current.startTriggeredAt = undefined;
+              }
+              simulatorStartClearTimeoutRef.current = null;
+            }, 6000);
+          } else {
+            const durationMs = 200;
+            const keyCopy = key;
+            window.setTimeout(() => {
+              if (simulatorEegCommandRef.current) simulatorEegCommandRef.current[keyCopy] = false;
+            }, durationMs);
           }
-          const durationMs = key === "start" ? 4000 : 200;
-          const keyCopy = key;
-          window.setTimeout(() => {
-            if (simulatorEegCommandRef.current) {
-              simulatorEegCommandRef.current[keyCopy] = false;
-              if (keyCopy === "start") simulatorEegCommandRef.current.startTriggeredAt = undefined;
-            }
-          }, durationMs);
         }
       } catch (_) {}
     };
     return () => {
+      if (simulatorStartClearTimeoutRef.current) clearTimeout(simulatorStartClearTimeoutRef.current);
       ws.close();
     };
-  }, [showSimulator, machineId, showConnectModal]);
+  }, [showSimulator, showConnectModal, machineId]);
 
   useEffect(() => {
     if (!machineId) {
@@ -466,6 +517,25 @@ export default function MachinePage() {
             <div className="flex items-center justify-between">
               <div className="flex-1">
                 <DialogTitle>3D Simulator</DialogTitle>
+                {simulatorEegBackendStatus && (
+                  <div className="mt-1 flex items-center gap-2">
+                    <p className={`text-xs ${simulatorEegBackendStatus.connected && simulatorEegBackendStatus.has_data ? "text-green-600" : "text-yellow-600"}`}>
+                      Muse 2: {simulatorEegBackendStatus.message}
+                      {simulatorEegBackendStatus.connected && !simulatorEegBackendStatus.has_data && " (waiting for data...)"}
+                    </p>
+                    {!simulatorEegBackendStatus.connected && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleSimulatorReconnectMuse}
+                        disabled={simulatorReconnecting}
+                        className="h-6 text-xs"
+                      >
+                        {simulatorReconnecting ? "Reconnecting..." : "Reconnect to Muse 2"}
+                      </Button>
+                    )}
+                  </div>
+                )}
               </div>
               <Button variant="ghost" size="sm" onClick={() => setShowSimulator(false)} className="h-8 w-8 p-0">×</Button>
             </div>
@@ -533,13 +603,21 @@ export default function MachinePage() {
         </DialogContent>
       </Dialog>
       <Dialog open={showConnectModal} onOpenChange={setShowConnectModal}>
-        <DialogContent className="max-w-5xl w-[90vw] h-[85vh] flex flex-col p-0 overflow-hidden">
-          <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-            <div className="flex-1 min-h-0 min-w-0 overflow-hidden max-h-[72vh]">
-              <TelloCamera className="h-full min-h-0" autoStart={false} useTestApi />
+        <DialogContent className="max-w-5xl w-[90vw] h-[85vh] max-h-[85vh] flex flex-col p-0 overflow-hidden">
+          <div className="flex flex-col flex-1 min-h-0 overflow-hidden max-h-full">
+            <div className="flex-1 min-h-0 min-w-0 overflow-hidden">
+              <TelloCamera className="h-full min-h-0" autoStart={false} useTestApi={false} />
             </div>
-            <div className="h-[50px] w-full flex-shrink-0 min-h-0">
-              <BrainwavePanel className="h-full w-full" enabled={showConnectModal} />
+            <div className="flex flex-col flex-1 min-h-0 w-full border-t border-border max-h-full overflow-hidden">
+              <BrainwavePanel className="h-full max-h-full min-h-0 w-full overflow-auto" enabled={showConnectModal} />
+              <p className="text-sm text-muted-foreground px-4 py-2 border-t border-border flex-shrink-0">
+                {Object.keys(triggeredCounts).length === 0
+                  ? "Triggered: —"
+                  : `Triggered: ${Object.entries(triggeredCounts)
+                      .filter(([, n]) => n > 0)
+                      .map(([name, n]) => `${name} (${n})`)
+                      .join(", ")}`}
+              </p>
             </div>
           </div>
         </DialogContent>
