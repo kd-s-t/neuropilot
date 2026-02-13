@@ -16,3 +16,4 @@ __pycache__/
 # Backend runtime
 _backend/action_log.txt
 _backend/.venv/
+_backend/*.pt
