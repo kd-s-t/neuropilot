@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     AI_TRAIN_PROVIDER: str = "gemini"
     EVENT_USE_GEMINI: bool = False
+    TELLO_BACKEND_URL: str = ""
 
     class Config:
         env_file = ".env"

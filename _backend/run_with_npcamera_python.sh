@@ -1,12 +1,19 @@
 #!/bin/bash
-# Run neuropilot backend with the same Python that np camera uses (Python 3.10 with working cv2).
-# Do NOT set DYLD_LIBRARY_PATH so cv2 uses /usr/lib/libiconv (working). PYLSL_LIB still points to conda's liblsl.
+# Run neuropilot backend with a Python that has working cv2 (avoids conda libiconv/dlopen error).
+# Unsets DYLD_LIBRARY_PATH so cv2 uses system libiconv. PYLSL_LIB can still point to conda's liblsl.
 cd "$(dirname "$0")"
-NP_PYTHON="/usr/local/bin/python3"
-if [ ! -x "$NP_PYTHON" ]; then
-  echo "Python not found: $NP_PYTHON"
-  echo "From np camera backend dir run: which python3"
-  echo "Then: NEUROPILOT_PYTHON=/path/to/python3 ./start_server.sh"
+if [ -n "$NEUROPILOT_PYTHON" ] && [ -x "$NEUROPILOT_PYTHON" ]; then
+  NP_PYTHON="$NEUROPILOT_PYTHON"
+elif [ -x "/opt/homebrew/bin/python3" ]; then
+  NP_PYTHON="/opt/homebrew/bin/python3"
+elif [ -x "/usr/local/bin/python3" ]; then
+  NP_PYTHON="/usr/local/bin/python3"
+else
+  NP_PYTHON=""
+fi
+if [ -z "$NP_PYTHON" ] || [ ! -x "$NP_PYTHON" ]; then
+  echo "No system/Homebrew python3 found. Set NEUROPILOT_PYTHON to a Python with working cv2 (e.g. from np-camera env):"
+  echo "  NEUROPILOT_PYTHON=/path/to/python3 ./run_with_npcamera_python.sh"
   exit 1
 fi
 unset DYLD_LIBRARY_PATH
