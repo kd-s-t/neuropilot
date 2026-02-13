@@ -12,8 +12,8 @@ variable "region" {
 
 variable "plan" {
   type        = string
-  description = "Vultr plan ID (e.g. vc2-1c-1gb, vc2-1c-2gb)"
-  default     = "vc2-1c-2gb"
+  description = "Vultr plan ID. Set via TF_VAR_plan (e.g. vc2-1c-2gb, vc2-2c-4gb, vc2-4c-8gb)"
+  default     = "vc2-2c-4gb"
 }
 
 variable "os_id" {

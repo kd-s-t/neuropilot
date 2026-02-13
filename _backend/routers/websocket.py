@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 from collections import defaultdict
 from controllers import EEGController, EventController
+from controllers.machine_control_service import register_simulate, unregister_simulate
 
 router = APIRouter(tags=["websocket"])
 
@@ -95,8 +96,11 @@ async def websocket_control_triggers(websocket: WebSocket):
     except ValueError:
         await websocket.close(code=4000)
         return
+    simulate = websocket.query_params.get("simulate", "").strip().lower() in ("1", "true", "yes")
     await websocket.accept()
     control_trigger_clients[machine_id].append(websocket)
+    if simulate:
+        register_simulate(machine_id, id(websocket))
     try:
         while True:
             await asyncio.sleep(3600)
@@ -105,3 +109,4 @@ async def websocket_control_triggers(websocket: WebSocket):
     finally:
         if websocket in control_trigger_clients[machine_id]:
             control_trigger_clients[machine_id].remove(websocket)
+        unregister_simulate(machine_id, id(websocket))

@@ -10,10 +10,12 @@ Match modes (env MATCH_MODE):
 """
 
 import os
+import base64
 import httpx
 import asyncio
 import json
-from typing import Dict, List, Optional
+import re
+from typing import Dict, List, Optional, Any, Set
 from datetime import datetime
 from collections import defaultdict
 from sqlalchemy.orm import Session
@@ -27,6 +29,26 @@ SIMILARITY_APPROXIMATE = 0.60
 _SENTINEL_OLD = datetime(1970, 1, 1)
 _global_last_trigger: Dict[str, datetime] = {}
 _MIN_TRIGGER_INTERVAL = 3.0
+ACCUMULATOR_SIZE = 5
+_ACTION_ACCUMULATOR: Dict[str, List[str]] = defaultdict(list)
+_simulate_machine_connections: Dict[int, Set[int]] = defaultdict(set)
+
+
+def register_simulate(machine_id: int, connection_id: int) -> None:
+    _simulate_machine_connections[machine_id].add(connection_id)
+
+
+def unregister_simulate(machine_id: int, connection_id: int) -> None:
+    _simulate_machine_connections[machine_id].discard(connection_id)
+
+
+def is_machine_in_simulate_mode(machine_id: int) -> bool:
+    return len(_simulate_machine_connections.get(machine_id, set())) > 0
+_CONTROL_ID_TO_LABEL: Dict[str, str] = {
+    "turn_left": "left", "turn left": "left", "turnright": "right", "turn_right": "right", "turn right": "right",
+    "left": "left", "right": "right", "forward": "forward", "back": "back", "reverse": "back",
+    "up": "up", "down": "down", "cw": "right", "ccw": "left", "rotate_cw": "right", "rotate_ccw": "left",
+}
 
 EVENT_TO_CONTROL = {
     "Look Right": "Turn Right",
@@ -62,6 +84,213 @@ def _event_name_to_session_name_candidates(event_name: str) -> list:
         out.append(first)
     return out
 
+
+def _control_id_to_label(control_id: str) -> str:
+    key = (control_id or "").strip().lower().replace(" ", "_")
+    if key in _CONTROL_ID_TO_LABEL:
+        return _CONTROL_ID_TO_LABEL[key]
+    for k, v in _CONTROL_ID_TO_LABEL.items():
+        if k.replace("_", " ") in key or key in k:
+            return v
+    return key.replace("_", " ") or "unknown"
+
+
+def _get_drone_state() -> Dict[str, Any]:
+    out: Dict[str, Any] = {"position": {}, "battery": None, "distance_from_home_cm": None, "max_distance_cm": None}
+    try:
+        import tello as tello_module
+        cache = tello_module.get_position_cache()
+        if cache:
+            out["position"] = cache.state()
+            out["distance_from_home_cm"] = round(cache.distance_from_home(), 1)
+            out["max_distance_cm"] = getattr(cache, "max_distance_cm", 300)
+        conn = tello_module.get_connection()
+        if conn and conn.connected:
+            r = conn.send_command("battery?", timeout=2.0)
+            if r and r.isdigit():
+                out["battery"] = int(r)
+    except Exception:
+        pass
+    return out
+
+
+def _get_camera_base64() -> Optional[str]:
+    try:
+        from tello.video_stream import get_latest_jpeg
+        jpeg = get_latest_jpeg()
+        if jpeg:
+            return base64.b64encode(jpeg).decode("ascii")
+    except Exception:
+        pass
+    return None
+
+
+def _get_latest_jpeg_bytes() -> Optional[bytes]:
+    try:
+        from tello.video_stream import get_latest_jpeg
+        return get_latest_jpeg()
+    except Exception:
+        pass
+    return None
+
+
+_YOLO_MODEL = None
+
+
+def _run_yolo(jpeg_bytes: bytes) -> str:
+    global _YOLO_MODEL
+    if not jpeg_bytes:
+        return "no frame"
+    try:
+        import numpy as np
+        try:
+            import cv2
+        except ImportError:
+            cv2 = None
+        if cv2 is None:
+            return "no cv2"
+        buf = np.frombuffer(jpeg_bytes, dtype=np.uint8)
+        img = cv2.imdecode(buf, cv2.IMREAD_COLOR)
+        if img is None:
+            return "decode failed"
+        try:
+            from ultralytics import YOLO
+        except ImportError:
+            return "yolo not installed"
+        if _YOLO_MODEL is None:
+            _YOLO_MODEL = YOLO("yolov8n.pt")
+        results = _YOLO_MODEL.predict(source=img, conf=0.25, verbose=False)
+        parts = []
+        h, w = img.shape[:2]
+        for r in results:
+            if r.boxes is None:
+                continue
+            for box in r.boxes:
+                cls_id = int(box.cls[0])
+                name = r.names.get(cls_id, "object")
+                conf = float(box.conf[0])
+                xyxy = box.xyxy[0]
+                cx = (float(xyxy[0]) + float(xyxy[2])) / 2
+                cy = (float(xyxy[1]) + float(xyxy[3])) / 2
+                if cx < w * 0.33:
+                    zone = "left"
+                elif cx > w * 0.66:
+                    zone = "right"
+                else:
+                    zone = "center"
+                parts.append(f"{name} {zone}")
+        if not parts:
+            return "no obstacles"
+        return ", ".join(parts[:10])
+    except Exception:
+        return "yolo error"
+
+
+def _openai_decide(
+    actions: List[str],
+    drone_state: Dict[str, Any],
+    camera_b64: Optional[str],
+    obstacles: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        return [{"control_id": (actions[0] if actions else "land"), "value": 20}] if actions else []
+    _skip = ("no frame", "no cv2", "yolo not installed", "yolo error", "decode failed")
+    obs_for_prompt = obstacles if obstacles and obstacles not in _skip else None
+    obs_text = f" Camera obstacles (YOLO): {obs_for_prompt}." if obs_for_prompt else ""
+    prompt = (
+        "You are a safety pilot for a Tello drone. The user controls the drone with brainwaves; the last %d intended actions (in order) are: %s. "
+        "Drone state: position (x,y,z cm, yaw deg): %s, battery: %s, distance_from_home_cm: %s, max_distance_cm: %s.%s "
+        "Decide what the user is trying to do and output ONE or a few Tello commands that are safe: respect boundaries (stay within max_distance_cm), avoid obstacles, and low battery. "
+        "Allowed control_id: forward, back, left, right, up, down, cw, ccw, land. Use value in 20-100 for distance (cm) or angle (deg). "
+        "If unsafe (obstacle, boundary, low battery), output land or a single safe move. Reply with ONLY a JSON object, no markdown: {\"commands\": [{\"control_id\": \"left\", \"value\": 30}, ...]}."
+    ) % (
+        len(actions),
+        ", ".join(actions),
+        drone_state.get("position", {}),
+        drone_state.get("battery"),
+        drone_state.get("distance_from_home_cm"),
+        drone_state.get("max_distance_cm"),
+        obs_text,
+    )
+    messages: List[Dict[str, Any]] = [{"role": "user", "content": prompt}]
+    if camera_b64 and not obs_for_prompt:
+        messages[0]["content"] = [
+            {"type": "text", "text": prompt},
+            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{camera_b64}"}},
+        ]
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=api_key)
+        resp = client.chat.completions.create(
+            model=os.environ.get("OPENAI_DRONE_MODEL", "gpt-4o-mini"),
+            messages=messages,
+            max_tokens=500,
+        )
+        text = (resp.choices[0].message.content or "").strip()
+        match = re.search(r"\{[\s\S]*\}", text)
+        if match:
+            data = json.loads(match.group())
+            cmds = data.get("commands")
+            if isinstance(cmds, list):
+                return [c for c in cmds if isinstance(c, dict) and c.get("control_id")]
+    except Exception:
+        pass
+    return [{"control_id": (actions[0] if actions else "land"), "value": 20}] if actions else []
+
+
+async def _execute_accumulated_impl(
+    db: Session,
+    machine_id: int,
+    actions: List[str],
+    on_trigger=None,
+) -> None:
+    drone_state = _get_drone_state()
+    use_yolo = not is_machine_in_simulate_mode(machine_id)
+    jpeg_bytes = _get_latest_jpeg_bytes() if use_yolo else None
+    obstacles = _run_yolo(jpeg_bytes) if jpeg_bytes else None
+    camera_b64 = base64.b64encode(jpeg_bytes).decode("ascii") if jpeg_bytes else None
+    commands = _openai_decide(actions, drone_state, camera_b64, obstacles=obstacles)
+    import tello as tello_module
+    for c in commands:
+        control_id = (c.get("control_id") or "land").strip()
+        value = c.get("value") if isinstance(c.get("value"), (int, float)) else 20
+        try:
+            response = tello_module.send_command(control_id, int(value))
+            success = response is not None
+            log = MachineLog(
+                machine_id=machine_id,
+                control_id=control_id,
+                webhook_url="internal://tello",
+                value=int(value),
+                success=success,
+                status_code=200 if success else None,
+                error_message=None,
+                response_data=response,
+            )
+            db.add(log)
+            db.commit()
+        except Exception as e:
+            log = MachineLog(
+                machine_id=machine_id,
+                control_id=control_id,
+                webhook_url="internal://tello",
+                value=int(value) if isinstance(value, (int, float)) else None,
+                success=False,
+                status_code=None,
+                error_message=str(e)[:500],
+                response_data=None,
+            )
+            db.add(log)
+            db.commit()
+        if on_trigger:
+            try:
+                await on_trigger(machine_id, control_id, int(value) if isinstance(value, (int, float)) else None)
+            except Exception:
+                pass
+        await asyncio.sleep(0.2)
+
+
 class MachineControlService:
     """Service to process brainwave patterns and trigger machine controls"""
 
@@ -75,7 +304,15 @@ class MachineControlService:
         self._similarity_threshold = (
             SIMILARITY_APPROXIMATE if self._match_mode == "approximate" else SIMILARITY_STRICT
         )
-        
+
+    async def _execute_accumulated(
+        self,
+        machine_id: int,
+        actions: List[str],
+        on_trigger=None,
+    ) -> None:
+        await _execute_accumulated_impl(self.db, machine_id, actions, on_trigger=on_trigger)
+
     async def process_band_powers(
         self,
         band_powers: Dict[str, Dict[str, float]],
@@ -132,29 +369,17 @@ class MachineControlService:
                         on_trigger=on_trigger,
                     )
                 else:
-                    try:
-                        import tello as tello_module
-                        response = tello_module.send_command(binding.control_id, control_value)
-                        success = response is not None
-                        log = MachineLog(
-                            machine_id=machine.id,
-                            control_id=binding.control_id,
-                            webhook_url="internal://tello",
-                            value=control_value,
-                            success=success,
-                            status_code=200 if success else None,
-                            error_message=None,
-                            response_data=response
+                    acc_key = f"{user_id}_{machine.id}"
+                    label = _control_id_to_label(binding.control_id)
+                    _ACTION_ACCUMULATOR[acc_key].append(label)
+                    if len(_ACTION_ACCUMULATOR[acc_key]) >= ACCUMULATOR_SIZE:
+                        actions = list(_ACTION_ACCUMULATOR[acc_key])
+                        _ACTION_ACCUMULATOR[acc_key] = []
+                        await self._execute_accumulated(
+                            machine.id,
+                            actions,
+                            on_trigger=on_trigger,
                         )
-                        self.db.add(log)
-                        self.db.commit()
-                    except Exception:
-                        pass
-                    if on_trigger:
-                        try:
-                            await on_trigger(machine.id, binding.control_id, control_value)
-                        except Exception:
-                            pass
 
     def _training_session_ids_by_name(self, user_id: int, event_name: str) -> List[int]:
         candidates = _event_name_to_session_name_candidates(EVENT_TO_CONTROL.get(event_name) or event_name)

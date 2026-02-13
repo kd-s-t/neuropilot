@@ -442,8 +442,10 @@ export const api = {
     createEeg(): WebSocket {
       return new WebSocket(`${WS_BASE}/ws/eeg`);
     },
-    createControlTriggers(machineId: number): WebSocket {
-      return new WebSocket(`${WS_BASE}/ws/control-triggers?machine_id=${machineId}`);
+    createControlTriggers(machineId: number, simulate?: boolean): WebSocket {
+      const params = new URLSearchParams({ machine_id: String(machineId) });
+      if (simulate === true) params.set("simulate", "1");
+      return new WebSocket(`${WS_BASE}/ws/control-triggers?${params.toString()}`);
     },
   },
 };

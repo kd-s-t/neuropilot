@@ -97,7 +97,8 @@ export default function MachinePage() {
 
   useEffect(() => {
     if (!showSimulator || machineId == null) return;
-    const ws = api.ws.createControlTriggers(machineId);
+    const simulate = !showConnectModal;
+    const ws = api.ws.createControlTriggers(machineId, simulate);
     type EegCommandKey = Exclude<keyof EegCommand, "startTriggeredAt">;
     const controlIdToKey: Record<string, EegCommandKey> = {
       Start: "start",
@@ -140,7 +141,7 @@ export default function MachinePage() {
     return () => {
       ws.close();
     };
-  }, [showSimulator, machineId]);
+  }, [showSimulator, machineId, showConnectModal]);
 
   useEffect(() => {
     if (!machineId) {
