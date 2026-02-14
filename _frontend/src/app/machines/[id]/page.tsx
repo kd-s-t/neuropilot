@@ -55,6 +55,8 @@ export default function MachinePage() {
   const [logsLoading, setLogsLoading] = useState(false);
   const [bindings, setBindings] = useState<string[]>([]);
   const [connectBattery, setConnectBattery] = useState<number | null>(null);
+  const [telloConnected, setTelloConnected] = useState(false);
+  const [telloConnecting, setTelloConnecting] = useState(false);
   const [triggeredCounts, setTriggeredCounts] = useState<Record<string, number>>({});
 
   const SIMULATOR_EEG_INITIAL = {
@@ -82,6 +84,20 @@ export default function MachinePage() {
     const id = setInterval(check, 5000);
     return () => clearInterval(id);
   }, [showSimulator]);
+
+  const handleConnectTello = useCallback(async () => {
+    setTelloConnecting(true);
+    try {
+      await api.tello.connect();
+      const h = await api.tello.health();
+      if (h) setTelloConnected(h.tello_connected ?? false);
+    } catch {
+      const h = await api.tello.health();
+      if (h) setTelloConnected(h.tello_connected ?? false);
+    } finally {
+      setTelloConnecting(false);
+    }
+  }, []);
 
   const handleSimulatorReconnectMuse = useCallback(async () => {
     setSimulatorReconnecting(true);
@@ -236,6 +252,16 @@ export default function MachinePage() {
     const id = setInterval(fetchBattery, 10000);
     return () => clearInterval(id);
   }, [showConnectModal]);
+
+  useEffect(() => {
+    const check = async () => {
+      const h = await api.tello.health();
+      if (h) setTelloConnected(h.tello_connected ?? false);
+    };
+    check();
+    const id = setInterval(check, 5000);
+    return () => clearInterval(id);
+  }, []);
 
   // Fetch control bindings for this machine so simulator can consider them present
   useEffect(() => {
@@ -423,6 +449,26 @@ export default function MachinePage() {
                   onClick={() => setShowSimulator(true)}
                 >
                   Start Simulator
+                </Button>
+              </motion.div>
+              <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3, delay: 0.28 }}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                className="flex items-center gap-2"
+              >
+                <span className={`text-xs hidden sm:inline ${telloConnected ? "text-green-600" : "text-muted-foreground"}`}>
+                  Tello: {telloConnected ? "Connected" : "Not connected"}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleConnectTello}
+                  disabled={telloConnecting || telloConnected}
+                >
+                  {telloConnecting ? "Connecting..." : telloConnected ? "Tello OK" : "Connect Tello"}
                 </Button>
               </motion.div>
               <motion.div
