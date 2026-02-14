@@ -6,9 +6,44 @@ on:
   workflow_dispatch:
 
 jobs:
+  build:
+    name: Build and push images to VCR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Vultr CR
+        uses: docker/login-action@v3
+        with:
+          registry: https://${{ secrets.VULTR_CR_HOST }}/${{ secrets.VULTR_CR_NAME }}
+          username: ${{ secrets.VULTR_CR_USER }}
+          password: ${{ secrets.VULTR_CR_PASSWORD }}
+
+      - name: Build and push backend
+        run: |
+          docker build --platform linux/amd64 \
+            -t ${{ secrets.VULTR_CR_HOST }}/${{ secrets.VULTR_CR_NAME }}/${{ secrets.VULTR_CR_HOST }}/backend:latest \
+            -f _backend/Dockerfile _backend
+          docker push ${{ secrets.VULTR_CR_HOST }}/${{ secrets.VULTR_CR_NAME }}/${{ secrets.VULTR_CR_HOST }}/backend:latest
+
+      - name: Build and push frontend
+        env:
+          NEXT_PUBLIC_BACKEND_URL: ${{ secrets.NEXT_PUBLIC_BACKEND_URL }}
+        run: |
+          docker build --platform linux/amd64 \
+            --build-arg NEXT_PUBLIC_BACKEND_URL=${NEXT_PUBLIC_BACKEND_URL:-https://api.theneuropilot.com} \
+            -t ${{ secrets.VULTR_CR_HOST }}/${{ secrets.VULTR_CR_NAME }}/${{ secrets.VULTR_CR_HOST }}/frontend:latest \
+            -f _frontend/Dockerfile _frontend
+          docker push ${{ secrets.VULTR_CR_HOST }}/${{ secrets.VULTR_CR_NAME }}/${{ secrets.VULTR_CR_HOST }}/frontend:latest
+
   deploy:
     name: Pull from VCR and deploy on VM
     runs-on: ubuntu-latest
+    needs: build
     steps:
       - name: SSH and pull latest images
         uses: appleboy/ssh-action@v1.0.3
