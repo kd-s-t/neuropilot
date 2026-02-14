@@ -26,7 +26,7 @@ class PositionCache:
         self._armed = False
 
     def state(self) -> dict:
-        return {"x": self._x, "y": self._y, "z": self._z, "yaw": self._yaw}
+        return {"x": self._x, "y": self._y, "z": self._z, "yaw": self._yaw, "armed": self._armed}
 
     def distance_from_home(self) -> float:
         return math.hypot(self._x, self._y, self._z)

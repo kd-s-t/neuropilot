@@ -57,6 +57,8 @@ export default function MachinePage() {
   const [connectBattery, setConnectBattery] = useState<number | null>(null);
   const [telloConnected, setTelloConnected] = useState(false);
   const [telloConnecting, setTelloConnecting] = useState(false);
+  const telloConnectingRef = useRef(false);
+  telloConnectingRef.current = telloConnecting;
   const [triggeredCounts, setTriggeredCounts] = useState<Record<string, number>>({});
 
   const SIMULATOR_EEG_INITIAL = {
@@ -182,9 +184,13 @@ export default function MachinePage() {
         const key = controlId != null
           ? (controlIdToKey[controlId] ?? byNormalized[normalize(controlId)])
           : undefined;
+        const isStart = key === "start";
+        if (isStart && telloConnectingRef.current) return;
         if (key && simulatorEegCommandRef.current) {
           simulatorEegCommandRef.current[key] = true;
           if (key === "start") {
+            window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyF", key: "f", bubbles: true }));
+            window.setTimeout(() => window.dispatchEvent(new KeyboardEvent("keyup", { code: "KeyF", key: "f", bubbles: true })), 100);
             simulatorEegCommandRef.current.startTriggeredAt = Date.now();
             if (simulatorStartClearTimeoutRef.current) clearTimeout(simulatorStartClearTimeoutRef.current);
             simulatorStartClearTimeoutRef.current = window.setTimeout(() => {

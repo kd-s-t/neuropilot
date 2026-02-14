@@ -9,10 +9,13 @@ if [ -f scripts/.env.vultr ]; then
 fi
 
 if [ -z "${VULTR_CR_REGISTRY}" ]; then
-  if [ -n "${VULTR_CR_HOST}" ] && [ -n "${VULTR_CR_NAME}" ]; then
-    VULTR_CR_REGISTRY="${VULTR_CR_HOST}/${VULTR_CR_NAME}"
+  if [ -n "${VULTR_CR_HOST}" ]; then
+    case "${VULTR_CR_HOST}" in
+      */*) VULTR_CR_REGISTRY="${VULTR_CR_HOST}" ;;
+      *)   VULTR_CR_REGISTRY="${VULTR_CR_HOST}/${VULTR_CR_NAME:-neuropilot}" ;;
+    esac
   else
-    echo "Set VULTR_CR_REGISTRY (e.g. sgp.vultrcr.com/neuropilot) or VULTR_CR_HOST and VULTR_CR_NAME. Optional: source scripts/.env.vultr"
+    echo "Set VULTR_CR_REGISTRY (e.g. sgp.vultrcr.com/neuropilot) or VULTR_CR_HOST. Optional: source scripts/.env.vultr"
     exit 1
   fi
 fi

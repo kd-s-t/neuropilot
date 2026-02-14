@@ -14,7 +14,7 @@ import base64
 import asyncio
 import json
 import re
-from typing import Dict, List, Optional, Any, Set
+from typing import Dict, List, Optional, Any, Set, Tuple
 from datetime import datetime
 from collections import defaultdict
 from sqlalchemy.orm import Session
@@ -94,13 +94,38 @@ def _control_id_to_label(control_id: str) -> str:
     return key.replace("_", " ") or "unknown"
 
 
+def _position_id_to_canonical(cid: str) -> List[str]:
+    key = (cid or "").strip().lower().replace(" ", "_").replace("-", "_")
+    if not key:
+        return []
+    if key in ("start", "takeoff"):
+        return ["start", "takeoff"]
+    if key in ("forward", "back", "reverse", "left", "right", "up", "down", "cw", "ccw", "land", "stop"):
+        return [key] if key != "reverse" else ["back"]
+    if "turn" in key and "left" in key:
+        return ["ccw"]
+    if "turn" in key and "right" in key:
+        return ["cw"]
+    return [key]
+
+
+def _allowed_control_ids_for_machine(control_positions: List[Dict[str, Any]]) -> Set[str]:
+    out: Set[str] = {"land"}
+    for c in control_positions or []:
+        cid = (c.get("id") or "").strip()
+        out.update(_position_id_to_canonical(cid))
+    return out
+
+
 def _get_drone_state() -> Dict[str, Any]:
-    out: Dict[str, Any] = {"position": {}, "battery": None, "distance_from_home_cm": None, "max_distance_cm": None}
+    out: Dict[str, Any] = {"position": {}, "battery": None, "distance_from_home_cm": None, "max_distance_cm": None, "armed": False}
     try:
         import tello as tello_module
         cache = tello_module.get_position_cache()
         if cache:
-            out["position"] = cache.state()
+            st = cache.state()
+            out["position"] = st
+            out["armed"] = st.get("armed", False)
             out["distance_from_home_cm"] = round(cache.distance_from_home(), 1)
             out["max_distance_cm"] = getattr(cache, "max_distance_cm", 300)
         conn = tello_module.get_connection()
@@ -190,6 +215,7 @@ def _openai_decide(
     drone_state: Dict[str, Any],
     camera_b64: Optional[str],
     obstacles: Optional[str] = None,
+    allowed_control_ids: Optional[Set[str]] = None,
 ) -> List[Dict[str, Any]]:
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
@@ -197,12 +223,21 @@ def _openai_decide(
     _skip = ("no frame", "no cv2", "yolo not installed", "yolo error", "decode failed")
     obs_for_prompt = obstacles if obstacles and obstacles not in _skip else None
     obs_text = f" Camera obstacles (YOLO): {obs_for_prompt}." if obs_for_prompt else ""
+    armed = drone_state.get("armed", False)
+    in_air_note = " The drone is already airborne (armed). Do NOT output start or takeoff; only movement (forward, back, left, right, up, down, cw, ccw) or land." if armed else ""
+    allowed = allowed_control_ids or {"forward", "back", "left", "right", "up", "down", "cw", "ccw", "land", "start", "takeoff"}
+    allowed_list = sorted(allowed)
+    allowed_instruction = (
+        " You MUST only output control_id from this exact list (no other commands): %s. Do not output left, right, up, down, back, cw, ccw, start, or takeoff unless they are in this list."
+        % ", ".join(allowed_list)
+    )
     prompt = (
         "You are a safety pilot for a Tello drone. The user controls the drone with brainwaves; the last %d intended actions (in order) are: %s. "
-        "Drone state: position (x,y,z cm, yaw deg): %s, battery: %s, distance_from_home_cm: %s, max_distance_cm: %s.%s "
+        "Drone state: position (x,y,z cm, yaw deg): %s, battery: %s, distance_from_home_cm: %s, max_distance_cm: %s, armed: %s.%s%s "
         "Decide what the user is trying to do and output ONE or a few Tello commands that are safe: respect boundaries (stay within max_distance_cm), avoid obstacles, and low battery. "
-        "Allowed control_id: forward, back, left, right, up, down, cw, ccw, land. Use value in 20-100 for distance (cm) or angle (deg). "
-        "If unsafe (obstacle, boundary, low battery), output land or a single safe move. Reply with ONLY a JSON object, no markdown: {\"commands\": [{\"control_id\": \"left\", \"value\": 30}, ...]}."
+        "Use value in 20-100 for distance (cm) or angle (deg).%s "
+        "If the drone is on the ground (not armed), you may output takeoff (or start) only if in the allowed list; if already airborne, output only movement or land. "
+        "If unsafe (obstacle, boundary, low battery), output land or a single safe move. Reply with ONLY a JSON object, no markdown: {\"commands\": [{\"control_id\": \"forward\", \"value\": 30}, ...]}."
     ) % (
         len(actions),
         ", ".join(actions),
@@ -210,7 +245,10 @@ def _openai_decide(
         drone_state.get("battery"),
         drone_state.get("distance_from_home_cm"),
         drone_state.get("max_distance_cm"),
+        armed,
         obs_text,
+        in_air_note,
+        allowed_instruction,
     )
     messages: List[Dict[str, Any]] = [{"role": "user", "content": prompt}]
     if camera_b64 and not obs_for_prompt:
@@ -244,6 +282,9 @@ async def _execute_accumulated_impl(
     actions: List[str],
     on_trigger=None,
 ) -> None:
+    machine = db.query(Machine).filter(Machine.id == machine_id).first()
+    control_positions = (machine.control_positions or []) if machine else []
+    allowed_control_ids = _allowed_control_ids_for_machine(control_positions)
     drone_state = _get_drone_state()
     use_yolo = not is_machine_in_simulate_mode(machine_id)
     jpeg_bytes = _get_latest_jpeg_bytes() if use_yolo else None
@@ -255,15 +296,21 @@ async def _execute_accumulated_impl(
     elif jpeg_bytes:
         obstacles = None
     camera_b64 = base64.b64encode(jpeg_bytes).decode("ascii") if jpeg_bytes else None
-    print("Calling AI", "actions=", actions, "obstacles=", obstacles)
-    commands = _openai_decide(actions, drone_state, camera_b64, obstacles=obstacles)
+    print("Calling AI", "actions=", actions, "obstacles=", obstacles, "allowed_controls=", sorted(allowed_control_ids))
+    commands = _openai_decide(actions, drone_state, camera_b64, obstacles=obstacles, allowed_control_ids=allowed_control_ids)
     print("AI commands:", commands)
     import tello as tello_module
     LOW_BATTERY_TAKEOFF_THRESHOLD = 10
+    drone_armed = drone_state.get("armed", False)
     for c in commands:
         control_id = (c.get("control_id") or "land").strip()
         value = c.get("value") if isinstance(c.get("value"), (int, float)) else 20
-        is_takeoff = control_id.lower() in ("start", "takeoff")
+        control_lower = control_id.lower()
+        if control_lower not in allowed_control_ids:
+            continue
+        is_takeoff = control_lower in ("start", "takeoff")
+        if is_takeoff and drone_armed:
+            continue
         if is_takeoff and isinstance(drone_state.get("battery"), (int, float)) and drone_state["battery"] < LOW_BATTERY_TAKEOFF_THRESHOLD:
             print("Skipping takeoff: battery", drone_state["battery"], "% below", LOW_BATTERY_TAKEOFF_THRESHOLD)
             log = MachineLog(

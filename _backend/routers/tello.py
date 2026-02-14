@@ -145,9 +145,21 @@ async def execute_command(request: CommandRequest):
 
 @router.get("/health")
 async def health():
+    tello_connected = tello.is_connected()
+    if tello_connected:
+        conn = tello.get_connection()
+        if conn:
+            try:
+                r = conn.send_command("battery?", timeout=2.0)
+                if r is None or not r.isdigit():
+                    tello.disconnect()
+                    tello_connected = False
+            except Exception:
+                tello.disconnect()
+                tello_connected = False
     return {
         "status": "healthy",
-        "tello_connected": tello.is_connected(),
+        "tello_connected": tello_connected,
         "video_receiver_running": is_receiver_running(),
         "video_has_frames": video_has_received_frames() or is_ffmpeg_stream_available(),
     }

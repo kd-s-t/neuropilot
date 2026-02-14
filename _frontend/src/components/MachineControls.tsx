@@ -29,7 +29,7 @@ import {
   Filler,
 } from "chart.js";
 import { Line } from "react-chartjs-2";
-import ReactFlow, { Node, Edge, Background, Controls, MiniMap, NodeTypes, applyNodeChanges, OnNodesChange } from "reactflow";
+import ReactFlow, { Node, Edge, Background, Controls, MiniMap, NodeTypes, applyNodeChanges, OnNodesChange, ReactFlowInstance } from "reactflow";
 import "reactflow/dist/style.css";
 import { api } from "@/lib/api";
 import { toast } from "@heroui/react";
@@ -614,7 +614,7 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
       const updatedNodes = applyNodeChanges(changes, nds);
       
       // Only mark as changed when we have saved positions and they differ (avoids card on initial load)
-      const hasChanges = updatedNodes.some(node => {
+      const hasChanges = updatedNodes.some((node: Node) => {
         const saved = savedPositionsRef.current[node.id];
         if (!saved) return false;
         return saved.x !== node.position.x || saved.y !== node.position.y;
@@ -741,7 +741,7 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
           key={`${machine.id}-${machine.blueprint || 'no-blueprint'}-${nodes.length}`}
           nodes={nodes}
           edges={edges}
-          onInit={(inst) => {
+          onInit={(inst: ReactFlowInstance) => {
             rfInstanceRef.current = inst;
             // restore saved viewport if present (from DB first, then localStorage)
             try {
