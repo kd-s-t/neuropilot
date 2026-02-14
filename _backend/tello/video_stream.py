@@ -10,10 +10,17 @@ import threading
 import time
 from typing import Optional, Generator
 
-try:
-    import av
-except ImportError:
-    av = None
+av = None
+
+def _ensure_av():
+    global av
+    if av is None:
+        try:
+            import av as _av
+            av = _av
+        except ImportError:
+            pass
+    return av
 
 cv2 = None
 
