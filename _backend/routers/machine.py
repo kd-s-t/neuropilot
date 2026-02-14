@@ -3,7 +3,6 @@ from sqlalchemy.orm import Session
 from typing import List
 import os
 import shutil
-import httpx
 import json
 from config import get_db
 from schemas import MachineCreate, MachineResponse, MachineControlBindingCreate, MachineControlBindingResponse, MachineUpdatePositions, MachineLogResponse, TriggerWebhookRequest
@@ -180,50 +179,22 @@ async def trigger_webhook(
     control = next((c for c in control_positions if c.get("id") == request.control_id), None)
     if not control:
         raise HTTPException(status_code=404, detail="Control not found")
-    req_url = (request.webhook_url or "").strip()
-    ctrl_url = (control.get("webhook_url") or "").strip()
-    request_internal = not req_url or req_url == "internal://tello"
-    control_internal = not ctrl_url or ctrl_url == "internal://tello"
-    use_internal = request_internal or control_internal
-    if not use_internal and ctrl_url != req_url:
-        raise HTTPException(status_code=400, detail="Command target URL does not match control configuration")
 
     success = False
     status_code = None
     error_message = None
     response_data = None
-    webhook_url = request.webhook_url or "internal://tello"
-
-    if use_internal:
-        try:
-            import tello as tello_module
-            response = tello_module.send_command(request.control_id, request.value)
-            success = response is not None
-            status_code = 200
-            response_data = response
-            if not success:
-                error_message = "Tello not connected or command not acknowledged. Connect to the drone on the machine page first."
-        except Exception as e:
-            error_message = str(e)[:1000]
-    else:
-        try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                response = await client.post(
-                    request.webhook_url,
-                    json={"control_id": request.control_id, "value": request.value}
-                )
-                status_code = response.status_code
-                try:
-                    response_data = json.dumps(response.json())
-                except Exception:
-                    response_data = response.text[:1000]
-                if response.status_code == 200:
-                    result = response.json()
-                    success = result.get('success', True)
-                else:
-                    error_message = f"HTTP {response.status_code}: {response.text[:500]}"
-        except Exception as e:
-            error_message = str(e)[:1000]
+    webhook_url = "internal://tello"
+    try:
+        import tello as tello_module
+        response = tello_module.send_command(request.control_id, request.value)
+        success = response is not None
+        status_code = 200
+        response_data = response
+        if not success:
+            error_message = "Tello not connected or command not acknowledged. Connect to the drone on the machine page first."
+    except Exception as e:
+        error_message = str(e)[:1000]
 
     log = MachineLog(
         machine_id=machine_id,

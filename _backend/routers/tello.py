@@ -43,6 +43,33 @@ class CommandResponse(BaseModel):
     response: Optional[str] = None
 
 
+_STANDARD_CONTROL_IDS = [
+    ("Start", None),
+    ("Left", 20),
+    ("Right", 20),
+    ("Reverse", 20),
+    ("Forward", 20),
+    ("Stop", None),
+    ("Up", 20),
+    ("Down", 20),
+    ("Turn Left", 90),
+    ("Turn Right", 90),
+    ("Flip Left", None),
+    ("Flip Right", None),
+    ("Flip Forward", None),
+    ("Flip Back", None),
+]
+
+
+@router.get("/commands")
+def list_command_mappings():
+    out = []
+    for control_id, value in _STANDARD_CONTROL_IDS:
+        cmd = tello.DJICommands.get_command(control_id, value)
+        out.append({"control_id": control_id, "value": value, "sdk_command": cmd})
+    return {"mappings": out}
+
+
 @router.post("/connect")
 async def connect_tello():
     try:

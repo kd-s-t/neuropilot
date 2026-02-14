@@ -11,7 +11,6 @@ Match modes (env MATCH_MODE):
 
 import os
 import base64
-import httpx
 import asyncio
 import json
 import re
@@ -392,26 +391,13 @@ class MachineControlService:
                     continue
                 _global_last_trigger[control_key] = now
 
-                if webhook_url:
-                    await self._trigger_webhook(
-                        machine.id,
-                        webhook_url,
-                        binding.control_id,
-                        control_value,
-                        on_trigger=on_trigger,
-                    )
-                else:
-                    acc_key = f"{user_id}_{machine.id}"
-                    label = _control_id_to_label(binding.control_id)
-                    _ACTION_ACCUMULATOR[acc_key].append(label)
-                    if len(_ACTION_ACCUMULATOR[acc_key]) >= ACCUMULATOR_SIZE:
-                        actions = list(_ACTION_ACCUMULATOR[acc_key])
-                        _ACTION_ACCUMULATOR[acc_key] = []
-                        await self._execute_accumulated(
-                            machine.id,
-                            actions,
-                            on_trigger=on_trigger,
-                        )
+                await self._trigger_webhook(
+                    machine.id,
+                    webhook_url or "internal://tello",
+                    binding.control_id,
+                    control_value,
+                    on_trigger=on_trigger,
+                )
 
     def _training_session_ids_by_name(self, user_id: int, event_name: str) -> List[int]:
         candidates = _event_name_to_session_name_candidates(EVENT_TO_CONTROL.get(event_name) or event_name)
@@ -440,7 +426,7 @@ class MachineControlService:
         for machine in machines:
             bindings = self.machine_controller.get_machine_bindings(machine.id, user_id, self.db)
             control_positions = machine.control_positions or []
-            control_configs = {c.get("id"): c for c in control_positions if c.get("id") and c.get("webhook_url")}
+            control_configs = {c.get("id"): c for c in control_positions if c.get("id")}
             for binding in bindings:
                 if binding.training_session_id not in session_ids:
                     continue
@@ -559,60 +545,34 @@ class MachineControlService:
         value: Optional[int] = None,
         on_trigger=None,
     ) -> None:
-        """Call webhook to execute machine command and log the result."""
+        """Send command directly to internal Tello and log the result."""
+        import tello as tello_module
+        webhook_url = "internal://tello"
         success = False
         status_code = None
         error_message = None
         response_data = None
-
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.post(
-                    webhook_url,
-                    json={
-                        "control_id": control_id,
-                        "value": value
-                    }
-                )
-                status_code = response.status_code
-                
-                try:
-                    response_data = json.dumps(response.json())
-                except:
-                    response_data = response.text[:1000]  # Limit to 1000 chars
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    success = result.get('success', True)
-                    print(f"✓ Webhook triggered: {control_id} -> {webhook_url} (success: {success})")
-                else:
-                    error_message = f"HTTP {response.status_code}: {response.text[:500]}"
-                    key = f"{webhook_url}:{control_id}"
-                    now = datetime.now()
-                    if now.timestamp() - _last_webhook_error_log.get(key, _SENTINEL_OLD).timestamp() >= WEBHOOK_ERROR_LOG_INTERVAL:
-                        _last_webhook_error_log[key] = now
-                        print(f"✗ Webhook failed: {control_id} -> {webhook_url} (status: {response.status_code})")
+            response = tello_module.send_command(control_id, value)
+            success = response is not None
+            status_code = 200
+            response_data = response
+            if not success:
+                error_message = "Tello not connected or command not acknowledged"
         except Exception as e:
             error_message = str(e)[:1000]
-            key = f"{webhook_url}:{control_id}"
-            now = datetime.now()
-            if now.timestamp() - _last_webhook_error_log.get(key, _SENTINEL_OLD).timestamp() >= WEBHOOK_ERROR_LOG_INTERVAL:
-                _last_webhook_error_log[key] = now
-                print(f"✗ Webhook error: {control_id} -> {webhook_url} (error: {e})")
-        finally:
-            # Log the webhook call
-            log = MachineLog(
-                machine_id=machine_id,
-                control_id=control_id,
-                webhook_url=webhook_url,
-                value=value,
-                success=success,
-                status_code=status_code,
-                error_message=error_message,
-                response_data=response_data
-            )
-            self.db.add(log)
-            self.db.commit()
+        log = MachineLog(
+            machine_id=machine_id,
+            control_id=control_id,
+            webhook_url=webhook_url,
+            value=value,
+            success=success,
+            status_code=status_code,
+            error_message=error_message,
+            response_data=response_data
+        )
+        self.db.add(log)
+        self.db.commit()
         if on_trigger:
             try:
                 await on_trigger(machine_id, control_id, value)
