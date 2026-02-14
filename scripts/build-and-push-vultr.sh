@@ -26,10 +26,10 @@ fi
 
 echo "$VULTR_CR_PASSWORD" | docker login "https://$VULTR_CR_REGISTRY" -u "$VULTR_CR_USER" --password-stdin
 
-docker build -t "$VULTR_CR_REGISTRY/backend:latest" -f _backend/Dockerfile _backend
+docker build --platform linux/amd64 -t "$VULTR_CR_REGISTRY/backend:latest" -f _backend/Dockerfile _backend
 docker push "$VULTR_CR_REGISTRY/backend:latest"
 
-docker build -t "$VULTR_CR_REGISTRY/frontend:latest" \
+docker build --platform linux/amd64 -t "$VULTR_CR_REGISTRY/frontend:latest" \
   --build-arg "NEXT_PUBLIC_BACKEND_URL=$NEXT_PUBLIC_BACKEND_URL" \
   -f _frontend/Dockerfile _frontend
 docker push "$VULTR_CR_REGISTRY/frontend:latest"

@@ -17,7 +17,10 @@ jobs:
           username: root
           password: ${{ secrets.VM_SSH_PASSWORD }}
           script: |
+            mkdir -p /root/neuropilot
+            curl -sL "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/docker-compose.vultr.yml" -o /root/neuropilot/docker-compose.vultr.yml
+            curl -sL "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/Caddyfile.template" -o /root/neuropilot/Caddyfile.template
             echo "${{ secrets.VULTR_CR_PASSWORD }}" | docker login https://${{ secrets.VULTR_CR_HOST }}/${{ secrets.VULTR_CR_NAME }} -u ${{ secrets.VULTR_CR_USER }} --password-stdin
-            docker pull ${{ secrets.VULTR_CR_HOST }}/${{ secrets.VULTR_CR_NAME }}/backend:latest
-            docker pull ${{ secrets.VULTR_CR_HOST }}/${{ secrets.VULTR_CR_NAME }}/frontend:latest
-            cd /root/neuropilot 2>/dev/null && docker compose -f docker-compose.vultr.yml up -d || true
+            docker pull ${{ secrets.VULTR_CR_HOST }}/${{ secrets.VULTR_CR_NAME }}/${{ secrets.VULTR_CR_HOST }}/backend:latest
+            docker pull ${{ secrets.VULTR_CR_HOST }}/${{ secrets.VULTR_CR_NAME }}/${{ secrets.VULTR_CR_HOST }}/frontend:latest
+            cd /root/neuropilot && docker compose -f docker-compose.vultr.yml up -d
