@@ -443,55 +443,61 @@ export default function MachinePage() {
                   </span>
                 )}
               </motion.div>
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.3, delay: 0.28 }}
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-              >
-                <Button
-                  variant="outline"
-                  onClick={() => setShowSimulator(true)}
+              {machine?.type === "tello" && (
+                <motion.div
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.3, delay: 0.28 }}
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
                 >
-                  Start Simulator
-                </Button>
-              </motion.div>
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.3, delay: 0.28 }}
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-                className="flex items-center gap-2"
-              >
-                <span className={`text-xs hidden sm:inline ${telloConnected ? "text-green-600" : "text-muted-foreground"}`}>
-                  Tello: {telloConnected ? "Connected" : "Not connected"}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleConnectTello}
-                  disabled={telloConnecting || telloConnected}
-                >
-                  {telloConnecting ? "Connecting..." : telloConnected ? "Tello OK" : "Connect Tello"}
-                </Button>
-              </motion.div>
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.3, delay: 0.3 }}
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-              >
-                <Button 
-                  variant="outline" 
-                  type="button"
-                  onClick={() => setShowConnectModal(true)}>
-                  <Drone className="mr-2 h-5 w-5" />
-                  Connect
-                </Button>
-              </motion.div>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowSimulator(true)}
+                  >
+                    Start Simulator
+                  </Button>
+                </motion.div>
+              )}
+              {machine?.type === "tello" && (
+                <>
+                  <motion.div
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.3, delay: 0.28 }}
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.97 }}
+                    className="flex items-center gap-2"
+                  >
+                    <span className={`text-xs hidden sm:inline ${telloConnected ? "text-green-600" : "text-muted-foreground"}`}>
+                      Tello: {telloConnected ? "Connected" : "Not connected"}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleConnectTello}
+                      disabled={telloConnecting || telloConnected}
+                    >
+                      {telloConnecting ? "Connecting..." : telloConnected ? "Tello OK" : "Connect Tello"}
+                    </Button>
+                  </motion.div>
+                  <motion.div
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.3, delay: 0.3 }}
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.97 }}
+                  >
+                    <Button 
+                      variant="outline" 
+                      type="button"
+                      onClick={() => setShowConnectModal(true)}>
+                      <Drone className="mr-2 h-5 w-5" />
+                      Connect
+                    </Button>
+                  </motion.div>
+                </>
+              )}
               <motion.div
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}

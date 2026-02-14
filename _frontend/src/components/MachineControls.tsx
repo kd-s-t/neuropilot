@@ -75,6 +75,8 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
   const [editingControl, setEditingControl] = useState<Control | null>(null);
   const [newControlId, setNewControlId] = useState("");
   const [newControlDescription, setNewControlDescription] = useState("");
+  const [newControlWebhook, setNewControlWebhook] = useState("");
+  const [newControlValue, setNewControlValue] = useState("");
   const [newControlIcon, setNewControlIcon] = useState("");
   const [newControlBgColor, setNewControlBgColor] = useState("");
   const [savingControls, setSavingControls] = useState(false);
@@ -390,6 +392,8 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
       setEditingControl(null);
       setNewControlId("");
       setNewControlDescription("");
+      setNewControlWebhook("");
+      setNewControlValue("");
       setNewControlIcon("");
       setNewControlBgColor("");
       setControlIdError(null);
@@ -422,11 +426,15 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
       setControlIdError("Control ID already exists");
       return;
     }
+    const parsedValue = newControlValue.trim() === "" ? undefined : Number(newControlValue);
+    const numValue = parsedValue !== undefined && !Number.isNaN(parsedValue) ? parsedValue : undefined;
     const newControl: Control = {
       id: newControlId.trim(),
       x: 1,
       y: 1,
       ...(newControlDescription.trim() ? { description: newControlDescription.trim() } : {}),
+      ...(newControlWebhook.trim() ? { webhook_url: newControlWebhook.trim() } : {}),
+      ...(numValue !== undefined ? { value: numValue } : {}),
       ...(newControlIcon.trim() ? { icon: newControlIcon.trim() } : {}),
       ...(newControlBgColor.trim() ? { bgColor: newControlBgColor.trim() } : {}),
     };
@@ -437,6 +445,8 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
     setEditingControl(control);
     setNewControlId(control.id);
     setNewControlDescription(control.description || "");
+    setNewControlWebhook((control as { webhook_url?: string }).webhook_url ?? "");
+    setNewControlValue((control as { value?: number }).value !== undefined ? String((control as { value?: number }).value) : "");
     setNewControlIcon(control.icon || "");
     setNewControlBgColor(control.bgColor || "");
     setControlIdError(null);
@@ -452,6 +462,8 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
       setControlIdError("Control ID already exists");
       return;
     }
+    const parsedValue = newControlValue.trim() === "" ? undefined : Number(newControlValue);
+    const numValue = parsedValue !== undefined && !Number.isNaN(parsedValue) ? parsedValue : undefined;
     const updatedControls = controls.map(c =>
       c.id === editingControl.id
         ? {
@@ -460,6 +472,8 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
             x: c.x,
             y: c.y,
             ...(newControlDescription.trim() ? { description: newControlDescription.trim() } : {}),
+            ...(newControlWebhook.trim() ? { webhook_url: newControlWebhook.trim() } : {}),
+            ...(numValue !== undefined ? { value: numValue } : {}),
             ...(newControlIcon.trim() ? { icon: newControlIcon.trim() } : {}),
             ...(newControlBgColor.trim() ? { bgColor: newControlBgColor.trim() } : {}),
           }
@@ -1170,6 +1184,25 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
                 disabled={savingControls}
               />
             </div>
+            <div className="space-y-2">
+              <Label>Webhook URL (Optional)</Label>
+              <Input
+                value={newControlWebhook}
+                onChange={(e) => setNewControlWebhook(e.target.value)}
+                placeholder="Leave empty for built-in Tello, or URL ending with /command or /controls"
+                disabled={savingControls}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Value (Optional)</Label>
+              <Input
+                type="number"
+                value={newControlValue}
+                onChange={(e) => setNewControlValue(e.target.value)}
+                placeholder="e.g., 0 or 1"
+                disabled={savingControls}
+              />
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Icon (Optional)</Label>
@@ -1218,6 +1251,8 @@ export default function MachineControls({ machine: initialMachine, onMachineUpda
                       setEditingControl(null);
                       setNewControlId("");
                       setNewControlDescription("");
+                      setNewControlWebhook("");
+                      setNewControlValue("");
                       setNewControlIcon("");
                       setNewControlBgColor("");
                       setControlIdError(null);
