@@ -1,4 +1,6 @@
 venv
+.venv
+env
 __pycache__
 *.pyc
 *.pyo
@@ -6,7 +8,13 @@ __pycache__
 .gitignore
 *.db
 .env
+.env.*
 .pytest_cache
 .coverage
 htmlcov
 *.md
+.mypy_cache
+.ruff_cache
+*.egg-info
+dist
+build

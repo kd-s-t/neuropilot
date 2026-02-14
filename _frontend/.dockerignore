@@ -1,0 +1,14 @@
+node_modules
+.next
+.git
+.gitignore
+.env
+.env.*
+*.md
+.DS_Store
+npm-debug.log*
+.npm
+.cursor
+coverage
+.nyc_output
+*.tsbuildinfo
